@@ -6,6 +6,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
 
@@ -17,19 +18,24 @@ object WaveRestrictionsApi {
         val req = Request.Builder()
             .url("https://api.music.yandex.net/rotor/station/user:onyourwave/info")
             .header("Authorization", "OAuth $token")
-            .header("User-Agent", "MusicTV/0.9.5 AndroidTV")
+            .header("User-Agent", "MusicTV/0.9.5.2 AndroidTV")
             .get().build()
         http.newCall(req).execute().use { r ->
             val text = r.body?.string().orEmpty()
-            if (!r.isSuccessful) throw IOException("Wave info HTTP ${r.code}: ${text.take(160)}")
+            if (!r.isSuccessful) throw IOException("Wave info HTTP ${r.code}: ${text.take(240)}")
             val root = JSONObject(text)
-            val result = root.optJSONObject("result") ?: throw IOException("В Wave info нет result")
+            val rawResult = root.opt("result") ?: throw IOException("В Wave info нет result")
+            val result: JSONObject = when (rawResult) {
+                is JSONObject -> rawResult
+                is JSONArray -> rawResult.optJSONObject(0) ?: throw IOException("Wave info вернул пустой result[]")
+                else -> throw IOException("Неизвестный формат Wave info: ${rawResult.javaClass.simpleName}")
+            }
             val station = result.optJSONObject("station") ?: result
             val restrictions = station.optJSONObject("restrictions2")
                 ?: station.optJSONObject("restrictions")
                 ?: result.optJSONObject("restrictions2")
                 ?: result.optJSONObject("restrictions")
-                ?: throw IOException("Яндекс не вернул restrictions")
+                ?: throw IOException("Яндекс не вернул restrictions/restrictions2")
 
             fun options(vararg keys: String): List<WaveOption> {
                 var group: JSONObject? = null
@@ -51,11 +57,15 @@ object WaveRestrictionsApi {
                 return out
             }
 
-            WaveRestrictions(
+            val parsed = WaveRestrictions(
                 moods = options("moodEnergy", "mood_energy"),
                 diversities = options("diversity"),
                 languages = options("language")
             )
+            if (parsed.moods.isEmpty() && parsed.diversities.isEmpty() && parsed.languages.isEmpty()) {
+                throw IOException("restrictions получены, но possibleValues пусты")
+            }
+            parsed
         }
     }
 }

@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
@@ -19,11 +22,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
@@ -106,31 +113,37 @@ private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return 
 
 @Composable private fun PlayerScreen(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,track:Track?,play:(Track)->Unit,previous:()->Unit,back:()->Unit){
     val lyricsApi=remember(api){LyricsApi(tokenProvider={api.token})}
-    var showLyrics by remember(track?.id){mutableStateOf(true)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var duration by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope()
+    var showLyrics by remember(track?.id){mutableStateOf(true)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var duration by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope();val lyricState=rememberLazyListState()
     LaunchedEffect(track?.id){lyrics=null;message=null;showLyrics=true;track?.let{t->runCatching{lyricsApi.load(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст недоступен"}}}
-    LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track?.durationMs?:0L;playing=player.exo.isPlaying;delay(250)}}
+    LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track?.durationMs?:0L;playing=player.exo.isPlaying;delay(200)}}
     val lines=lyrics?.lines.orEmpty();val synced=lyrics?.synced==true;val idx=if(synced)lines.indexOfLast{it.timeMs<=pos}.coerceAtLeast(0) else 0;val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
+    LaunchedEffect(idx,lines.size,showLyrics){if(showLyrics&&synced&&lines.isNotEmpty())lyricState.animateScrollToItem((idx-2).coerceAtLeast(0))}
     Box(Modifier.fillMaxSize()){
-        Crossfade(targetState=track?.coverUrl,animationSpec=tween(850),label="playerBackground"){cover->cover?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
-        Box(Modifier.fillMaxSize().background(Color(0xB8090A0D)))
-        Column(Modifier.fillMaxSize().padding(horizontal=42.dp,vertical=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
-            Row(verticalAlignment=Alignment.CenterVertically){Button(onClick=back){Text("‹",fontSize=28.sp)};Spacer(Modifier.weight(1f))}
-            Row(Modifier.fillMaxWidth().weight(1f),horizontalArrangement=Arrangement.spacedBy(28.dp),verticalAlignment=Alignment.CenterVertically){
-                Box(Modifier.size(280.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF17181D))){track?.coverUrl?.let{AsyncImage(model=it,contentDescription=track.title,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
-                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)){Text(track?.title?:"Плеер",fontSize=38.sp,color=Color.White);Text(track?.artist.orEmpty(),fontSize=23.sp,color=Color.LightGray)
-                    LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(5.dp)))
-                    Row(Modifier.fillMaxWidth()){Text(clock(pos),color=Color.LightGray,fontSize=14.sp);Spacer(Modifier.weight(1f));Text(clock(duration),color=Color.LightGray,fontSize=14.sp)}
-                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
-                        Button(onClick=previous,contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("⏮",fontSize=23.sp)}
-                        Button(onClick={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()},contentPadding=PaddingValues(horizontal=22.dp,vertical=14.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=27.sp)}
-                        Button(onClick={scope.launch{runCatching{wave.next(player.exo.currentPosition/1000,true)}.onSuccess{it?.let(play)}.onFailure{message=it.message}}},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("⏭",fontSize=23.sp)}
-                        Button(onClick={scope.launch{runCatching{wave.likeCurrent()}.onSuccess{message="Добавлено в любимое ♥"}.onFailure{message=it.message}}},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("♡",fontSize=24.sp)}
-                        Button(onClick={if(lines.isNotEmpty())showLyrics=!showLyrics else message="Текст для этой песни не найден"},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("≡",fontSize=25.sp)}
+        Crossfade(targetState=track?.coverUrl,animationSpec=tween(900),label="playerBackground"){cover->cover?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize().blur(18.dp),contentScale=ContentScale.Crop)}}
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xB0000000),Color(0x42000000),Color(0xC8000000)))))
+        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(listOf(Color(0xA8000000),Color.Transparent,Color(0xA8000000)))))
+        Column(Modifier.fillMaxSize().padding(horizontal=48.dp,vertical=30.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){
+            Row(verticalAlignment=Alignment.CenterVertically){Button(onClick=back,modifier=Modifier.size(58.dp).shadow(10.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("‹",fontSize=28.sp)};Spacer(Modifier.weight(1f))}
+            Row(Modifier.fillMaxWidth().weight(1f),horizontalArrangement=Arrangement.spacedBy(38.dp),verticalAlignment=Alignment.CenterVertically){
+                Box(Modifier.size(300.dp).shadow(28.dp,RoundedCornerShape(24.dp)).clip(RoundedCornerShape(24.dp)).background(Color(0xFF17181D))){track?.coverUrl?.let{AsyncImage(model=it,contentDescription=track.title,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
+                Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(11.dp)){Text(track?.title?:"Плеер",fontSize=38.sp,color=Color.White);Text(track?.artist.orEmpty(),fontSize=22.sp,color=Color(0xFFB8B8BD))
+                    LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(4.dp)))
+                    Row(Modifier.fillMaxWidth()){Text(clock(pos),color=Color(0xFFB8B8BD),fontSize=14.sp);Spacer(Modifier.weight(1f));Text(clock(duration),color=Color(0xFFB8B8BD),fontSize=14.sp)}
+                    Row(horizontalArrangement=Arrangement.spacedBy(14.dp),verticalAlignment=Alignment.CenterVertically){
+                        Button(onClick=previous,modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("⏮",fontSize=22.sp)}
+                        Button(onClick={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()},modifier=Modifier.size(64.dp).shadow(if(playing)18.dp else 12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=26.sp)}
+                        Button(onClick={scope.launch{runCatching{wave.next(player.exo.currentPosition/1000,true)}.onSuccess{it?.let(play)}.onFailure{message=it.message}}},modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("⏭",fontSize=22.sp)}
+                        Button(onClick={scope.launch{runCatching{wave.likeCurrent()}.onSuccess{message="Добавлено в любимое ♥"}.onFailure{message=it.message}}},modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("♡",fontSize=25.sp)}
+                        Button(onClick={if(lines.isNotEmpty())showLyrics=!showLyrics else message="Текст для этой песни не найден"},modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("≡",fontSize=25.sp)}
                     }
-                    message?.let{Text(it,color=YandexYellow,fontSize=14.sp)}
+                    message?.let{Text(it,color=Color(0xFFD6B5FF),fontSize=13.sp)}
                     if(showLyrics&&lines.isNotEmpty()){
-                        if(synced) Column(verticalArrangement=Arrangement.spacedBy(9.dp)){lines.getOrNull(idx-1)?.let{Text(it.text,fontSize=20.sp,color=Color.Gray)};lines.getOrNull(idx)?.let{Text(it.text,fontSize=30.sp,color=YandexYellow)};lines.getOrNull(idx+1)?.let{Text(it.text,fontSize=20.sp,color=Color.LightGray)}}
-                        else Column(verticalArrangement=Arrangement.spacedBy(7.dp)){lines.take(7).forEach{Text(it.text,fontSize=21.sp,color=Color.White)}}
+                        if(synced) LazyColumn(state=lyricState,modifier=Modifier.fillMaxWidth().height(178.dp),userScrollEnabled=false,verticalArrangement=Arrangement.spacedBy(3.dp)){
+                            itemsIndexed(lines,key={i,l->"$i-${l.timeMs}"}){i,line->
+                                val d=kotlin.math.abs(i-idx);val active=i==idx
+                                Box(Modifier.fillMaxWidth().height(32.dp),contentAlignment=Alignment.Center){Text(line.text,fontSize=if(active)24.sp else 19.sp,color=if(active)Color.White else Color.White.copy(alpha=when(d){1->0.58f;2->0.34f;else->0.16f}),textAlign=TextAlign.Center,maxLines=1)}
+                            }
+                        } else LazyColumn(modifier=Modifier.fillMaxWidth().height(178.dp),verticalArrangement=Arrangement.spacedBy(5.dp)){items(lines){Text(it.text,fontSize=20.sp,color=Color.White.copy(alpha=.82f),modifier=Modifier.fillMaxWidth(),textAlign=TextAlign.Center)}}
                     }
                 }
             }

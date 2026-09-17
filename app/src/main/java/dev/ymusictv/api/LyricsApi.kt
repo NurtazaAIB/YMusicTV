@@ -116,13 +116,10 @@ class LyricsApi(
 
     private fun plainLyrics(raw: String): Lyrics? {
         if (raw.isBlank()) return null
-        val lines = raw.replace("\r
-", "
-")
-            .lineSequence()
-            .map { it.trim() }
+        val lines = raw.lineSequence()
+            .map { it.trimEnd('\r').trim() }
             .filter { it.isNotBlank() }
-            .mapIndexed { i, s -> LyricLine(i.toLong(), s) }
+            .mapIndexed { i, line -> LyricLine(i.toLong(), line) }
             .toList()
         return Lyrics(lines, false).takeIf { lines.isNotEmpty() }
     }

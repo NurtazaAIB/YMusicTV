@@ -5,6 +5,8 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -58,9 +60,9 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
     val api=remember{YandexMusicApi().apply{token=prefs.getString("access_token",null)}}
     var loggedIn by remember{mutableStateOf(false)}; var checkingAuth by remember{mutableStateOf(true)}; var code by remember{mutableStateOf<String?>(null)}; var url by remember{mutableStateOf<String?>(null)}; var error by remember{mutableStateOf<String?>(null)}; var authInProgress by remember{mutableStateOf(false)}; var lastCrash by remember{mutableStateOf(diagnostics.getString("last_crash",null))}; val scope=rememberCoroutineScope()
     LaunchedEffect(Unit){ val saved=prefs.getString("access_token",null); val refresh=prefs.getString("refresh_token",null); if(!saved.isNullOrBlank()){api.token=saved; val ok=runCatching{api.accountName();true}.getOrDefault(false); if(ok) loggedIn=true else if(!refresh.isNullOrBlank()) runCatching{api.refreshAccessToken(refresh)}.onSuccess{t->prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).putLong("expires_at",System.currentTimeMillis()+((t.expiresIn?:3600)*1000L)).apply();loggedIn=true}}; checkingAuth=false }
-    MaterialTheme { Box(Modifier.fillMaxSize().background(Color(0xFF090A0D)).padding(38.dp)) {
-        if(checkingAuth) Column(verticalArrangement=Arrangement.spacedBy(18.dp)){Text("Музыка",fontSize=46.sp,color=YandexYellow);Text("Проверяем авторизацию…",color=Color.LightGray)}
-        else if(!loggedIn) Column(verticalArrangement=Arrangement.spacedBy(18.dp)){ Text("Музыка",fontSize=46.sp,color=YandexYellow); Text("Яндекс Музыка для Android TV",fontSize=21.sp,color=Color.LightGray)
+    MaterialTheme { Box(Modifier.fillMaxSize().background(Color(0xFF090A0D))) {
+        if(checkingAuth) Column(Modifier.padding(38.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){Text("Музыка",fontSize=46.sp,color=YandexYellow);Text("Проверяем авторизацию…",color=Color.LightGray)}
+        else if(!loggedIn) Column(Modifier.padding(38.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){ Text("Музыка",fontSize=46.sp,color=YandexYellow); Text("Яндекс Музыка для Android TV",fontSize=21.sp,color=Color.LightGray)
             Button(onClick={if(!authInProgress)scope.launch{authInProgress=true;error=null;try{val d=api.requestDeviceCode();code=d.userCode;url=d.verificationUrl;val interval=d.interval.coerceAtLeast(1);repeat((d.expiresIn/interval).coerceAtLeast(1)){delay(interval*1000L);val poll=runCatching{api.pollDeviceToken(d.deviceCode)};if(poll.isFailure){error="OAuth: ${poll.exceptionOrNull()?.message}";return@launch};poll.getOrNull()?.let{t->prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).apply();diagnostics.edit().clear().apply();lastCrash=null;loggedIn=true;return@launch}};error="Код авторизации истёк"}catch(e:CancellationException){throw e}catch(e:Throwable){error="Ошибка входа: ${e.message}"}finally{authInProgress=false}}}){Text(if(authInProgress)"Ожидание подтверждения…" else "Войти в Яндекс")};code?.let{Text("Код: $it",fontSize=40.sp,color=YandexYellow)};url?.let{Text("Откройте на телефоне: $it",color=Color.White)};error?.let{Text(it,color=Color(0xFFFF8A80))};lastCrash?.let{Text(it.take(1000),color=Color(0xFFFFCCBC),fontSize=12.sp)} }
         else { val player=remember{TvPlayer(context)};val wave=remember{WaveSession(api)};DisposableEffect(Unit){onDispose{player.release()}};Home(api,player,wave){prefs.edit().clear().apply();api.token=null;loggedIn=false} }
     }}
@@ -72,10 +74,12 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
     fun previous(){if(history.isNotEmpty()){val t=history.removeAt(history.lastIndex);play(t,false)}else player.exo.seekTo(0)}
     BackHandler(enabled=screen==Screen.PLAYER){screen=Screen.MUSIC}
     DisposableEffect(Unit){player.onEnded{scope.launch{runCatching{wave.next(player.exo.duration.coerceAtLeast(0)/1000,false)}.onSuccess{it?.let{t->retry=null;play(t)}}}};player.onError{val t=now;if(t!=null&&retry!=t.id){retry=t.id;scope.launch{runCatching{api.audioUrl(t.id)}.onSuccess{player.play(t,it)}}}};onDispose{}}
-    Column(Modifier.onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
+    if(screen==Screen.PLAYER){
+        PlayerScreen(api,player,wave,now,{play(it)},::previous){screen=Screen.MUSIC}
+    } else Column(Modifier.fillMaxSize().padding(38.dp).onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);now?.let{Button(onClick={screen=Screen.PLAYER}){Text("♫ ${it.title.take(24)}")}};Button(onClick=logout){Text("Выйти")}}
-        if(screen!=Screen.PLAYER)Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Button(onClick={screen=Screen.MUSIC}){Text("Музыка")};Button(onClick={screen=Screen.AUDIO}){Text("Аудио")};Button(onClick={screen=Screen.SEARCH}){Text("Поиск")}}
-        when(screen){Screen.MUSIC->MusicScreen(api,wave){play(it)};Screen.AUDIO->AudioScreen(api){play(it)};Screen.SEARCH->SearchScreen(api){play(it)};Screen.PLAYER->PlayerScreen(api,player,wave,now,{play(it)},::previous){screen=Screen.MUSIC}}
+        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Button(onClick={screen=Screen.MUSIC}){Text("Музыка")};Button(onClick={screen=Screen.AUDIO}){Text("Аудио")};Button(onClick={screen=Screen.SEARCH}){Text("Поиск")}}
+        when(screen){Screen.MUSIC->MusicScreen(api,wave){play(it)};Screen.AUDIO->AudioScreen(api){play(it)};Screen.SEARCH->SearchScreen(api){play(it)};Screen.PLAYER->{}}
     }
 }
 
@@ -103,13 +107,13 @@ private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return 
 @Composable private fun PlayerScreen(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,track:Track?,play:(Track)->Unit,previous:()->Unit,back:()->Unit){
     val context=LocalContext.current;val playerPrefs=remember{context.getSharedPreferences("player_settings",0)};val lyricsApi=remember(api){LyricsApi(tokenProvider={api.token})}
     var autoLyrics by remember{mutableStateOf(playerPrefs.getBoolean("auto_lyrics",true))};var showLyrics by remember(track?.id){mutableStateOf(autoLyrics)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var duration by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope()
-    LaunchedEffect(track?.id){lyrics=null;message=null;track?.let{t->runCatching{lyricsApi.load(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст: ${it.message}"}};showLyrics=autoLyrics&&lyrics?.lines?.isNotEmpty()==true}
+    LaunchedEffect(track?.id){lyrics=null;message=null;track?.let{t->runCatching{lyricsApi.load(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст недоступен"}};showLyrics=autoLyrics&&lyrics?.lines?.isNotEmpty()==true}
     LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track?.durationMs?:0L;playing=player.exo.isPlaying;delay(250)}}
     val lines=lyrics?.lines.orEmpty();val idx=lines.indexOfLast{it.timeMs<=pos}.coerceAtLeast(0);val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
     Box(Modifier.fillMaxSize()){
-        track?.coverUrl?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}
-        Box(Modifier.fillMaxSize().background(Color(0xD9090A0D)))
-        Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(14.dp)){
+        Crossfade(targetState=track?.coverUrl,animationSpec=tween(850),label="playerBackground"){cover->cover?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
+        Box(Modifier.fillMaxSize().background(Color(0xB8090A0D)))
+        Column(Modifier.fillMaxSize().padding(horizontal=42.dp,vertical=28.dp),verticalArrangement=Arrangement.spacedBy(14.dp)){
             Row(verticalAlignment=Alignment.CenterVertically){Button(onClick=back){Text("‹",fontSize=28.sp)};Spacer(Modifier.weight(1f));Button(onClick={autoLyrics=!autoLyrics;playerPrefs.edit().putBoolean("auto_lyrics",autoLyrics).apply();if(autoLyrics&&lines.isNotEmpty())showLyrics=true}){Text(if(autoLyrics)"✓ Текст" else "Текст")}}
             Row(Modifier.fillMaxWidth().weight(1f),horizontalArrangement=Arrangement.spacedBy(28.dp),verticalAlignment=Alignment.CenterVertically){
                 Box(Modifier.size(280.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF17181D))){track?.coverUrl?.let{AsyncImage(model=it,contentDescription=track.title,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}

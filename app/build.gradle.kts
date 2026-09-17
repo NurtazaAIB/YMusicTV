@@ -21,8 +21,8 @@ android {
         applicationId = "dev.ymusictv"
         minSdk = 28
         targetSdk = 35
-        versionCode = 19
-        versionName = "0.9.7"
+        versionCode = 20
+        versionName = "0.9.7.1"
     }
 
     compileOptions {
@@ -49,9 +49,7 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
-kotlin {
-    jvmToolchain(17)
-}
+kotlin { jvmToolchain(17) }
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.01.00"))

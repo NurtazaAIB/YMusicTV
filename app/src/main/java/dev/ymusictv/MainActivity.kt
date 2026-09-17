@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
+import dev.ymusictv.api.WaveRestrictionsApi
 import dev.ymusictv.api.YandexMusicApi
 import dev.ymusictv.model.*
 import dev.ymusictv.player.TvPlayer
@@ -69,19 +70,21 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
 }
 
 @Composable private fun MusicScreen(api:YandexMusicApi,wave:WaveSession,play:(Track)->Unit){
-    var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var title by remember{mutableStateOf("Главная")};var error by remember{mutableStateOf<String?>(null)};var settings by remember{mutableStateOf(WaveSettings())};var sections by remember{mutableStateOf<List<HomeSection>>(emptyList())};var showSettings by remember{mutableStateOf(false)};val scope=rememberCoroutineScope();LaunchedEffect(Unit){sections=runCatching{api.homeSections()}.getOrDefault(emptyList())}
+    var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var title by remember{mutableStateOf("Главная")};var error by remember{mutableStateOf<String?>(null)};var settings by remember{mutableStateOf(WaveSettings())};var restrictions by remember{mutableStateOf<WaveRestrictions?>(null)};var settingsLoading by remember{mutableStateOf(false)};var sections by remember{mutableStateOf<List<HomeSection>>(emptyList())};var showSettings by remember{mutableStateOf(false)};val scope=rememberCoroutineScope();LaunchedEffect(Unit){sections=runCatching{api.homeSections()}.getOrDefault(emptyList())}
+    fun loadSettings(){scope.launch{settingsLoading=true;error=null;runCatching{WaveRestrictionsApi.load(api.token)}.onSuccess{r->restrictions=r;settings=settings.copy(mood=r.moods.firstOrNull{it.value==settings.mood}?.value?:r.moods.firstOrNull()?.value?:settings.mood,diversity=r.diversities.firstOrNull{it.value==settings.diversity}?.value?:r.diversities.firstOrNull()?.value?:settings.diversity,language=r.languages.firstOrNull{it.value==settings.language}?.value?:r.languages.firstOrNull()?.value?:settings.language)}.onFailure{error="Настройки Волны: ${it.message}"};settingsLoading=false}}
     fun waveStart(){scope.launch{error=null;runCatching{wave.start(settings)}.onSuccess{t->title="Моя Волна";t?.let{tracks=listOf(it);play(it)}}.onFailure{error=it.message}}};fun chart(){scope.launch{runCatching{api.chart()}.onSuccess{title="Чарт";tracks=it}.onFailure{error=it.message}}}
-    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(title,fontSize=30.sp,color=Color.White);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={waveStart()}){Text("▶ Моя Волна")};Button(onClick={chart()}){Text("Чарт")};Button(onClick={showSettings=!showSettings}){Text(if(showSettings)"✕ Закрыть настройки" else "⚙ Настроить волну")}}
-        if(showSettings) WaveSettingsPanel(settings){settings=it}
+    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(title,fontSize=30.sp,color=Color.White);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={waveStart()}){Text("▶ Моя Волна")};Button(onClick={chart()}){Text("Чарт")};Button(onClick={showSettings=!showSettings;if(showSettings)loadSettings()}){Text(if(showSettings)"✕ Закрыть настройки" else "⚙ Настроить волну")}}
+        if(showSettings){when{settingsLoading->Text("Получаем доступные настройки от Яндекса…",color=Color.LightGray);restrictions!=null->WaveSettingsPanel(settings,restrictions!!){settings=it};else->Text("Нет данных о настройках Волны",color=Color.Gray)}}
         error?.let{Text(it,color=Color(0xFFFF8A80))};if(tracks.isNotEmpty())TrackList(tracks,play)else LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp),modifier=Modifier.fillMaxWidth().heightIn(max=455.dp)){items(sections,key={it.title}){section->Column(verticalArrangement=Arrangement.spacedBy(7.dp)){Text(section.title,fontSize=22.sp,color=Color.White);LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp)){items(section.cards.take(12),key={it.id+it.title}){card->HomePoster(card){scope.launch{if(!card.uid.isNullOrBlank()&&!card.kind.isNullOrBlank()){tracks=runCatching{api.playlistTracks(card.uid!!,card.kind!!)}.getOrDefault(emptyList());title=card.title}}}}}}}}
     }
 }
 
-@Composable private fun WaveSettingsPanel(s:WaveSettings,onChange:(WaveSettings)->Unit){
+@Composable private fun WaveSettingsPanel(s:WaveSettings,r:WaveRestrictions,onChange:(WaveSettings)->Unit){
     Column(verticalArrangement=Arrangement.spacedBy(7.dp),modifier=Modifier.fillMaxWidth().background(Color(0xFF15171C)).padding(12.dp)){
-        Text("Настроение",color=Color.LightGray,fontSize=17.sp);Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("all" to "Любое","fun" to "Весёлое","active" to "Активное","calm" to "Спокойное","sad" to "Грустное").forEach{(v,n)->Button(onClick={onChange(s.copy(mood=v))}){Text(if(s.mood==v)"✓ $n" else n)}}}
-        Text("Рекомендации",color=Color.LightGray,fontSize=17.sp);Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("default" to "Обычное","favorite" to "Любимое","popular" to "Популярное","discover" to "Открытия").forEach{(v,n)->Button(onClick={onChange(s.copy(diversity=v))}){Text(if(s.diversity==v)"✓ $n" else n)}}}
-        Text("Язык",color=Color.LightGray,fontSize=17.sp);Row(horizontalArrangement=Arrangement.spacedBy(6.dp)){listOf("kazakh" to "Казахское","russian" to "Русское","not-russian" to "Зарубежное","any" to "Любое").forEach{(v,n)->Button(onClick={onChange(s.copy(language=v))}){Text(if(s.language==v)"✓ $n" else n)}}}
+        if(r.moods.isNotEmpty()){Text("Настроение",color=Color.LightGray,fontSize=17.sp);LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){items(r.moods,key={it.value}){o->Button(onClick={onChange(s.copy(mood=o.value))}){Text(if(s.mood==o.value)"✓ ${o.name}" else o.name)}}}}
+        if(r.diversities.isNotEmpty()){Text("Рекомендации",color=Color.LightGray,fontSize=17.sp);LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){items(r.diversities,key={it.value}){o->Button(onClick={onChange(s.copy(diversity=o.value))}){Text(if(s.diversity==o.value)"✓ ${o.name}" else o.name)}}}}
+        if(r.languages.isNotEmpty()){Text("Язык",color=Color.LightGray,fontSize=17.sp);LazyRow(horizontalArrangement=Arrangement.spacedBy(6.dp)){items(r.languages,key={it.value}){o->Button(onClick={onChange(s.copy(language=o.value))}){Text(if(s.language==o.value)"✓ ${o.name}" else o.name)}}}}
+        Text("Варианты получены непосредственно от Яндекс Музыки",color=Color.Gray,fontSize=13.sp)
     }
 }
 

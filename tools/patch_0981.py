@@ -1,6 +1,10 @@
 from pathlib import Path
 p=Path('app/src/main/java/dev/ymusictv/MainActivity.kt')
 s=p.read_text()
+if 'import androidx.compose.ui.graphics.graphicsLayer' not in s:
+    anchor='import androidx.compose.ui.graphics.Color\n'
+    if anchor not in s: raise SystemExit('Color import anchor not found')
+    s=s.replace(anchor,anchor+'import androidx.compose.ui.graphics.graphicsLayer\n',1)
 old_effect='''    LaunchedEffect(idx,lines.size,showLyrics){if(showLyrics&&synced&&lines.isNotEmpty())lyricState.animateScrollToItem((idx-2).coerceAtLeast(0))}'''
 new_effect='''    val nextTime=lines.getOrNull(idx+1)?.timeMs ?: (lines.getOrNull(idx)?.timeMs?.plus(4000L) ?: pos+4000L)
     val currentTime=lines.getOrNull(idx)?.timeMs ?: pos

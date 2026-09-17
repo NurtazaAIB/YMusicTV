@@ -19,6 +19,7 @@ import java.util.UUID
 class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
     companion object {
         const val CLIENT_ID = "23cabbbdc6cd418abb4b39c32c41195d"
+        private const val CLIENT_SECRET = "53bc75238f0c4d08a118e51fe9203300"
         const val API = "https://api.music.yandex.net"
         const val OAUTH = "https://oauth.yandex.ru"
         private const val SIGN_SALT = "XGRlBW9FXlekgbPrRHuSiA"
@@ -27,24 +28,63 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
     private var accountUid: String? = null
 
     suspend fun requestDeviceCode(): DeviceCode = withContext(Dispatchers.IO) {
-        val body = FormBody.Builder().add("client_id", CLIENT_ID).add("device_id", UUID.randomUUID().toString().replace("-", "").take(10)).add("device_name", "YMusic TV").build()
-        executeJson(Request.Builder().url("$OAUTH/device/code").post(body).build()).let { j -> DeviceCode(j.getString("device_code"), j.getString("user_code"), j.getString("verification_url"), j.getInt("expires_in"), j.optInt("interval", 5)) }
+        val body = FormBody.Builder()
+            .add("client_id", CLIENT_ID)
+            .add("device_id", UUID.randomUUID().toString().replace("-", "").take(10))
+            .add("device_name", "Музыка TV")
+            .build()
+        executeJson(Request.Builder().url("$OAUTH/device/code").post(body).build()).let { j ->
+            DeviceCode(
+                j.getString("device_code"),
+                j.getString("user_code"),
+                j.getString("verification_url"),
+                j.getInt("expires_in"),
+                j.optInt("interval", 5)
+            )
+        }
     }
 
     suspend fun pollDeviceToken(deviceCode: String): OAuthToken? = withContext(Dispatchers.IO) {
-        val body = FormBody.Builder().add("grant_type", "device_code").add("code", deviceCode).add("client_id", CLIENT_ID).build()
+        val body = FormBody.Builder()
+            .add("grant_type", "device_code")
+            .add("code", deviceCode)
+            .add("client_id", CLIENT_ID)
+            .add("client_secret", CLIENT_SECRET)
+            .build()
         val req = Request.Builder().url("$OAUTH/token").post(body).build()
         http.newCall(req).execute().use { r ->
             val j = JSONObject(r.body?.string().orEmpty().ifBlank { "{}" })
-            if (!r.isSuccessful) { if (j.optString("error") == "authorization_pending") return@withContext null; throw IOException(j.optString("error_description", "OAuth HTTP ${r.code}")) }
-            OAuthToken(j.getString("access_token"), j.optString("refresh_token").ifBlank { null }, j.optInt("expires_in").takeIf { it > 0 }, j.optString("token_type").ifBlank { null }).also { token = it.accessToken }
+            if (!r.isSuccessful) {
+                when (j.optString("error")) {
+                    "authorization_pending", "slow_down" -> return@withContext null
+                    "expired_token" -> throw IOException("Код авторизации истёк")
+                    "access_denied" -> throw IOException("Авторизация отменена")
+                    else -> throw IOException(j.optString("error_description", "OAuth HTTP ${r.code}"))
+                }
+            }
+            OAuthToken(
+                j.getString("access_token"),
+                j.optString("refresh_token").ifBlank { null },
+                j.optInt("expires_in").takeIf { it > 0 },
+                j.optString("token_type").ifBlank { null }
+            ).also { token = it.accessToken }
         }
     }
 
     suspend fun refreshAccessToken(refreshToken: String): OAuthToken = withContext(Dispatchers.IO) {
-        val body = FormBody.Builder().add("grant_type", "refresh_token").add("refresh_token", refreshToken).add("client_id", CLIENT_ID).build()
+        val body = FormBody.Builder()
+            .add("grant_type", "refresh_token")
+            .add("refresh_token", refreshToken)
+            .add("client_id", CLIENT_ID)
+            .add("client_secret", CLIENT_SECRET)
+            .build()
         val j = executeJson(Request.Builder().url("$OAUTH/token").post(body).build())
-        OAuthToken(j.getString("access_token"), j.optString("refresh_token").ifBlank { refreshToken }, j.optInt("expires_in").takeIf { it > 0 }, j.optString("token_type").ifBlank { null }).also { token = it.accessToken }
+        OAuthToken(
+            j.getString("access_token"),
+            j.optString("refresh_token").ifBlank { refreshToken },
+            j.optInt("expires_in").takeIf { it > 0 },
+            j.optString("token_type").ifBlank { null }
+        ).also { token = it.accessToken }
     }
 
     suspend fun accountName(): String {
@@ -149,7 +189,7 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
     private suspend fun getResultArray(url: String): JSONArray = getJson(url).optJSONArray("result") ?: throw IOException("Пустой result")
     private suspend fun getJson(url: String): JSONObject = withContext(Dispatchers.IO) { executeJson(authRequest(url)) }
     private fun authRequest(url: String) = authBuilder(url).get().build()
-    private fun authBuilder(url: String): Request.Builder = Request.Builder().url(url).header("User-Agent", "YMusicTV/0.9 AndroidTV").apply { token?.let { header("Authorization", "OAuth $it") } }
+    private fun authBuilder(url: String): Request.Builder = Request.Builder().url(url).header("User-Agent", "Музыка/0.9 AndroidTV").apply { token?.let { header("Authorization", "OAuth $it") } }
     private fun executeJson(req: Request): JSONObject = JSONObject(executeText(req))
     private fun executeText(req: Request): String = http.newCall(req).execute().use { r -> if (!r.isSuccessful) throw IOException("HTTP ${r.code}: ${r.body?.string().orEmpty().take(200)}"); r.body?.string() ?: throw IOException("Пустой ответ") }
     private fun md5(s: String) = MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }

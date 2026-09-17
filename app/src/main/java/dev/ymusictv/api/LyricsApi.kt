@@ -19,7 +19,6 @@ class LyricsApi(
     companion object {
         private const val API = "https://api.music.yandex.net"
         private const val SIGN_KEY = "p93jhgh689SBReK6ghtw62"
-        // Match the ordinary web/API request profile used by current clean-room clients.
         private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     }
 
@@ -27,11 +26,10 @@ class LyricsApi(
         val fullId = trackId.trim()
         val numericId = fullId.substringBefore(':')
 
-        // Current Yandex servers reject the old signed lyrics request for many clients.
-        // The supplement endpoint is therefore the primary source for ordinary lyrics.
-        loadSupplement(fullId)
+        // Always try the synchronized source first. Supplement is only a plain-text fallback.
+        runCatching { loadSigned(numericId, "LRC") }.getOrNull()
+            ?: loadSupplement(fullId)
             ?: if (numericId != fullId) loadSupplement(numericId) else null
-            ?: runCatching { loadSigned(numericId, "LRC") }.getOrNull()
             ?: runCatching { loadSigned(numericId, "TEXT") }.getOrNull()
     }
 
@@ -60,9 +58,7 @@ class LyricsApi(
         val result = root.optJSONObject("result") ?: root
         val lyric = result.optJSONObject("lyrics") ?: return null
         if (lyric.has("hasRights") && !lyric.optBoolean("hasRights", true)) {
-            // Some responses still carry a preview in `lyrics`; use it if present.
-            val preview = lyric.optString("lyrics")
-            return plainLyrics(preview)
+            return plainLyrics(lyric.optString("lyrics"))
         }
         val raw = sequenceOf("fullLyrics", "full_lyrics", "lyrics")
             .map { lyric.optString(it) }

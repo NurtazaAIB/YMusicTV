@@ -248,12 +248,27 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
         return List(ids.length()) { i -> HomeCard(title="Подкаст ${i+1}", type="podcast", id=ids.opt(i).toString()) }
     }
 
+    suspend fun artistTracks(artistId: String, pageSize: Int = 50): List<Track> {
+        val result = getResult("$API/artists/$artistId/tracks?page=0&page-size=$pageSize")
+        val arr = result.optJSONArray("tracks") ?: JSONArray()
+        val out = mutableListOf<Track>()
+        for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { out += parseTrack(it) }
+        return out
+    }
+
+    suspend fun artistName(artistId: String): String {
+        val result = getResult("$API/artists/$artistId/brief-info")
+        return result.optJSONObject("artist")?.optString("name")?.ifBlank { null }
+            ?: result.optString("name").ifBlank { "Артист" }
+    }
+
     private fun parseTrack(j: JSONObject): Track {
         val artists = j.optJSONArray("artists") ?: JSONArray()
         val artist = (0 until artists.length()).joinToString(", ") { artists.optJSONObject(it)?.optString("name").orEmpty() }
         val cover = j.optString("coverUri").takeIf { it.isNotBlank() }?.replace("%%", "400x400")?.let { if (it.startsWith("http")) it else "https://$it" }
         val albumId = j.optJSONArray("albums")?.optJSONObject(0)?.opt("id")?.toString()
-        return Track(j.opt("id").toString(), albumId, j.optString("title", "Без названия"), artist, cover, j.optLong("durationMs"))
+        val artistId = artists.optJSONObject(0)?.opt("id")?.toString()
+        return Track(j.opt("id").toString(), albumId, j.optString("title", "Без названия"), artist, cover, j.optLong("durationMs"), artistId)
     }
 
     private suspend fun getResult(url: String): JSONObject = getJson(url).optJSONObject("result") ?: throw IOException("Пустой result")

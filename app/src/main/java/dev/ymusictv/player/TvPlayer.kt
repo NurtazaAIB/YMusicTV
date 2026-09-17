@@ -9,19 +9,22 @@ import androidx.media3.exoplayer.ExoPlayer
 import dev.ymusictv.model.Track
 
 class TvPlayer(context: Context) {
-    val exo = ExoPlayer.Builder(context).build()
+    private val appContext = context.applicationContext
     private var endedCallback: (() -> Unit)? = null
     private var errorCallback: ((PlaybackException) -> Unit)? = null
 
-    init {
-        exo.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) endedCallback?.invoke()
-            }
-            override fun onPlayerError(error: PlaybackException) {
-                errorCallback?.invoke(error)
-            }
-        })
+    val exo: ExoPlayer by lazy(LazyThreadSafetyMode.NONE) {
+        ExoPlayer.Builder(appContext).build().also { player ->
+            player.addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    if (state == Player.STATE_ENDED) endedCallback?.invoke()
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    errorCallback?.invoke(error)
+                }
+            })
+        }
     }
 
     fun play(track: Track, url: String) {
@@ -36,5 +39,10 @@ class TvPlayer(context: Context) {
 
     fun onEnded(block: () -> Unit) { endedCallback = block }
     fun onError(block: (PlaybackException) -> Unit) { errorCallback = block }
-    fun release() = exo.release()
+
+    fun release() {
+        if ((::class.java.getDeclaredField("exo\$delegate").apply { isAccessible = true }.get(this) as Lazy<*>).isInitialized()) {
+            exo.release()
+        }
+    }
 }

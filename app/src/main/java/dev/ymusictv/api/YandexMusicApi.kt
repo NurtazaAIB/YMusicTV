@@ -23,6 +23,7 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
         const val API = "https://api.music.yandex.net"
         const val OAUTH = "https://oauth.yandex.ru"
         private const val SIGN_SALT = "XGRlBW9FXlekgbPrRHuSiA"
+        private const val USER_AGENT = "MusicTV/0.9.3 AndroidTV"
     }
     var token: String? = null
     private var accountUid: String? = null
@@ -189,7 +190,7 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
     private suspend fun getResultArray(url: String): JSONArray = getJson(url).optJSONArray("result") ?: throw IOException("Пустой result")
     private suspend fun getJson(url: String): JSONObject = withContext(Dispatchers.IO) { executeJson(authRequest(url)) }
     private fun authRequest(url: String) = authBuilder(url).get().build()
-    private fun authBuilder(url: String): Request.Builder = Request.Builder().url(url).header("User-Agent", "Музыка/0.9 AndroidTV").apply { token?.let { header("Authorization", "OAuth $it") } }
+    private fun authBuilder(url: String): Request.Builder = Request.Builder().url(url).header("User-Agent", USER_AGENT).apply { token?.let { header("Authorization", "OAuth $it") } }
     private fun executeJson(req: Request): JSONObject = JSONObject(executeText(req))
     private fun executeText(req: Request): String = http.newCall(req).execute().use { r -> if (!r.isSuccessful) throw IOException("HTTP ${r.code}: ${r.body?.string().orEmpty().take(200)}"); r.body?.string() ?: throw IOException("Пустой ответ") }
     private fun md5(s: String) = MessageDigest.getInstance("MD5").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }

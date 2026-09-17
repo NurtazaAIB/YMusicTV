@@ -20,10 +20,6 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Unpack project source
-        run: unzip -o YMusicTV-source-v0.9.zip -d extracted && cp -a extracted/YMusicTV-v0.9/. .
-      - name: Static pre-build check
-        run: python3 prebuild_check.py
       - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Upload APK

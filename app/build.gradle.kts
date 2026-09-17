@@ -4,6 +4,13 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val encodedTestKey = rootProject.file(".github/ymusictv-test.keystore.b64")
+val stableTestKey = layout.buildDirectory.file("ymusictv-test.keystore").get().asFile
+if (encodedTestKey.exists()) {
+    stableTestKey.parentFile.mkdirs()
+    stableTestKey.writeBytes(java.util.Base64.getDecoder().decode(encodedTestKey.readText().trim()))
+}
+
 android {
     namespace = "dev.ymusictv"
     compileSdk = 35
@@ -23,8 +30,7 @@ android {
 
     signingConfigs {
         create("stableDebug") {
-            val ks = file("ymusictv-test.keystore")
-            storeFile = ks
+            storeFile = stableTestKey
             storePassword = "ymusictvtest"
             keyAlias = "ymusictvtest"
             keyPassword = "ymusictvtest"
@@ -33,8 +39,7 @@ android {
 
     buildTypes {
         debug {
-            val ks = file("ymusictv-test.keystore")
-            if (ks.exists()) signingConfig = signingConfigs.getByName("stableDebug")
+            if (stableTestKey.exists()) signingConfig = signingConfigs.getByName("stableDebug")
         }
     }
 

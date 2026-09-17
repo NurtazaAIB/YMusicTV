@@ -11,15 +11,27 @@ class WaveSession(private val api: YandexMusicApi) {
     private var current: Track? = null
     private var settings = WaveSettings()
 
+    /**
+     * Starts a fresh My Wave session.
+     *
+     * Important: settings errors are deliberately NOT swallowed here. The UI must
+     * never pretend that a selected mood/language was accepted when Yandex rejected it.
+     */
     suspend fun start(newSettings: WaveSettings = settings): Track? {
         settings = newSettings
-        // Station settings are optional. Yandex may reject settings3 for some
-        // accounts/station configurations; that must never prevent My Wave itself.
-        runCatching { api.setWaveSettings(settings) }
+        api.setWaveSettings(settings)
         queue.clear(); batchId = null; current = null
         runCatching { api.waveFeedback("radioStarted") }
         refill(null)
         return nextInternal()
+    }
+
+    suspend fun applySettings(newSettings: WaveSettings) {
+        api.setWaveSettings(newSettings)
+        settings = newSettings
+        // A settings change invalidates the old radio queue. Do not continue playing
+        // recommendations generated with the previous restrictions.
+        queue.clear(); batchId = null; current = null
     }
 
     suspend fun next(playedSeconds: Long, skipped: Boolean): Track? {
@@ -31,6 +43,7 @@ class WaveSession(private val api: YandexMusicApi) {
     }
 
     suspend fun likeCurrent(): Boolean = current?.let { api.likeTrack(it.id) } ?: false
+
     suspend fun dislikeAndSkip(playedSeconds: Long): Track? {
         current?.let { api.dislikeTrack(it.id) }
         return next(playedSeconds, true)

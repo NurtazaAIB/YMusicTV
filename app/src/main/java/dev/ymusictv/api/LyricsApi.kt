@@ -13,8 +13,8 @@ import java.io.IOException
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/** Lyrics flow matching the current Android-client protocol:
- * signed metadata request -> signed downloadUrl -> LRC/TEXT body.
+/** Lyrics flow matching the Android-client protocol:
+ * signed metadata request -> downloadUrl -> LRC/TEXT body.
  */
 class LyricsApi(
     private val tokenProvider: () -> String?,
@@ -28,17 +28,23 @@ class LyricsApi(
 
     suspend fun load(trackId: String): Lyrics? = withContext(Dispatchers.IO) {
         val numericId = trackId.substringBefore(':')
-        // Prefer synchronized lyrics, then fall back to plain text.
         loadFormat(numericId, "LRC") ?: loadFormat(numericId, "TEXT")
     }
+
+    private fun authorizedBuilder(url: okhttp3.HttpUrl): Request.Builder =
+        Request.Builder().url(url).header("User-Agent", USER_AGENT)
+            .apply { tokenProvider()?.let { header("Authorization", "OAuth $it") } }
+
+    private fun authorizedBuilder(url: String): Request.Builder =
+        Request.Builder().url(url).header("User-Agent", USER_AGENT)
+            .apply { tokenProvider()?.let { header("Authorization", "OAuth $it") } }
 
     private fun loadFormat(trackId: String, format: String): Lyrics? {
         val timestamp = System.currentTimeMillis() / 1000L
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(SIGN_KEY.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val signature = Base64.encodeToString(
-            mac.doFinal("$trackId$timestamp".toByteArray(Charsets.UTF_8)),
-            Base64.NO_WRAP
+            mac.doFinal("$trackId$timestamp".toByteArray(Charsets.UTF_8)), Base64.NO_WRAP
         )
 
         val url = "$API/tracks/$trackId/lyrics".toHttpUrl().newBuilder()
@@ -46,10 +52,7 @@ class LyricsApi(
             .addQueryParameter("timeStamp", timestamp.toString())
             .addQueryParameter("sign", signature)
             .build()
-        val request = Request.Builder().url(url)
-            .header("User-Agent", USER_AGENT)
-            .apply { tokenProvider()?.let { header("Authorization", "OAuth $it") } }
-            .get().build()
+        val request = authorizedBuilder(url).get().build()
 
         val envelope = http.newCall(request).execute().use { response ->
             val body = response.body?.string().orEmpty()
@@ -60,12 +63,12 @@ class LyricsApi(
         val result = envelope.optJSONObject("result") ?: envelope
         val downloadUrl = result.optString("downloadUrl").takeIf { it.isNotBlank() } ?: return null
 
-        val raw = http.newCall(Request.Builder().url(downloadUrl).header("User-Agent", USER_AGENT).get().build())
-            .execute().use { response ->
-                val body = response.body?.string().orEmpty()
-                if (!response.isSuccessful) throw IOException("Lyrics download HTTP ${response.code}")
-                body
-            }.removePrefix("\uFEFF")
+        // The official-client-style transport keeps OAuth on subsequent retrievals too.
+        val raw = http.newCall(authorizedBuilder(downloadUrl).get().build()).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (!response.isSuccessful) throw IOException("Lyrics download HTTP ${response.code}: ${body.take(120)}")
+            body
+        }.removePrefix("\uFEFF")
 
         if (raw.isBlank()) return null
         if (format == "TEXT") {
@@ -74,7 +77,6 @@ class LyricsApi(
             return Lyrics(plain, false).takeIf { plain.isNotEmpty() }
         }
 
-        // Supports [mm:ss], [mm:ss.xx] and [mm:ss.xxx], plus multiple timestamps per line.
         val stamp = Regex("\\[(\\d{1,3}):(\\d{2})(?:[.:](\\d{1,3}))?]")
         val parsed = mutableListOf<LyricLine>()
         raw.lineSequence().forEach { source ->
@@ -95,6 +97,6 @@ class LyricsApi(
                 parsed += LyricLine((min * 60L + sec) * 1000L + ms, text)
             }
         }
-        Lyrics(parsed.sortedBy { it.timeMs }, true).takeIf { parsed.isNotEmpty() }
+        return Lyrics(parsed.sortedBy { it.timeMs }, true).takeIf { parsed.isNotEmpty() }
     }
 }

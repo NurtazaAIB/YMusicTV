@@ -24,15 +24,15 @@ class LyricsApi(
         private const val MUSIC_CLIENT = "YandexMusicAndroid/24026442"
     }
 
-    suspend fun load(trackId: String): Lyrics? = withContext(Dispatchers.IO) {
+    suspend fun load(trackId: String, durationMs: Long = 0): Lyrics? = withContext(Dispatchers.IO) {
         val fullId = trackId.trim()
         val numericId = fullId.substringBefore(':')
 
         // Always try the synchronized source first. Supplement is only a plain-text fallback.
-        runCatching { loadSigned(fullId, numericId, "LRC") }.getOrNull()
+        runCatching { loadSigned(fullId, numericId, "LRC", durationMs) }.getOrNull()
             ?: loadSupplement(fullId)
             ?: if (numericId != fullId) loadSupplement(numericId) else null
-            ?: runCatching { loadSigned(fullId, numericId, "TEXT") }.getOrNull()
+            ?: runCatching { loadSigned(fullId, numericId, "TEXT", durationMs) }.getOrNull()
     }
 
     private fun builder(url: String) = Request.Builder()
@@ -70,13 +70,14 @@ class LyricsApi(
         return plainLyrics(raw)
     }
 
-    private fun loadSigned(requestTrackId: String, signingTrackId: String, format: String): Lyrics? {
+    private fun loadSigned(requestTrackId: String, signingTrackId: String, format: String, durationMs: Long): Lyrics? {
         val timestamp = System.currentTimeMillis() / 1000L
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(SIGN_KEY.toByteArray(Charsets.UTF_8), "HmacSHA256"))
         val signature = Base64.encodeToString(mac.doFinal("$signingTrackId$timestamp".toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
         val url = "$API/tracks/$requestTrackId/lyrics".toHttpUrl().newBuilder()
             .addQueryParameter("format", format)
+            .apply { if (durationMs > 0) addQueryParameter("durationMs", durationMs.toString()) }
             .addQueryParameter("timeStamp", timestamp.toString())
             .addQueryParameter("sign", signature)
             .build()

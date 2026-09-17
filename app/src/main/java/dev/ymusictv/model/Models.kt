@@ -7,6 +7,12 @@ data class WaveBatch(val batchId:String, val tracks:List<Track>)
 data class LyricLine(val timeMs:Long, val text:String)
 data class Lyrics(val lines:List<LyricLine>, val synced:Boolean)
 data class WaveSettings(val mood:String="all", val diversity:String="default", val language:String="any")
+data class WaveOption(val value:String, val name:String)
+data class WaveRestrictions(
+    val moods:List<WaveOption> = emptyList(),
+    val diversities:List<WaveOption> = emptyList(),
+    val languages:List<WaveOption> = emptyList()
+)
 
 data class HomeCard(val title:String, val subtitle:String="", val coverUrl:String?=null, val type:String="", val id:String="", val uid:String?=null, val kind:String?=null)
 data class HomeSection(val title:String, val cards:List<HomeCard>)

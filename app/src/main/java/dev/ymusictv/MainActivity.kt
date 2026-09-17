@@ -3,6 +3,7 @@ package dev.ymusictv
 import android.os.Bundle
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -25,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import coil.compose.AsyncImage
+import dev.ymusictv.api.LyricsApi
 import dev.ymusictv.api.WaveRestrictionsApi
 import dev.ymusictv.api.YandexMusicApi
 import dev.ymusictv.model.*
@@ -67,6 +70,7 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
     var screen by remember{mutableStateOf(Screen.MUSIC)};var name by remember{mutableStateOf("…")};var now by remember{mutableStateOf<Track?>(null)};val history=remember{mutableStateListOf<Track>()};val scope=rememberCoroutineScope();LaunchedEffect(Unit){runCatching{api.accountName()}.onSuccess{name=it}};var retry by remember{mutableStateOf<String?>(null)}
     fun play(t:Track,rememberPrevious:Boolean=true){scope.launch{runCatching{api.audioUrl(t.id)}.onSuccess{url->if(rememberPrevious){now?.takeIf{it.id!=t.id}?.let{history.add(it)}};player.play(t,url);now=t;screen=Screen.PLAYER}}}
     fun previous(){if(history.isNotEmpty()){val t=history.removeAt(history.lastIndex);play(t,false)}else player.exo.seekTo(0)}
+    BackHandler(enabled=screen==Screen.PLAYER){screen=Screen.MUSIC}
     DisposableEffect(Unit){player.onEnded{scope.launch{runCatching{wave.next(player.exo.duration.coerceAtLeast(0)/1000,false)}.onSuccess{it?.let{t->retry=null;play(t)}}}};player.onError{val t=now;if(t!=null&&retry!=t.id){retry=t.id;scope.launch{runCatching{api.audioUrl(t.id)}.onSuccess{player.play(t,it)}}}};onDispose{}}
     Column(Modifier.onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);now?.let{Button(onClick={screen=Screen.PLAYER}){Text("♫ ${it.title.take(24)}")}};Button(onClick=logout){Text("Выйти")}}
@@ -94,28 +98,32 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
     }
 }
 
+private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return "%d:%02d".format(total/60,total%60) }
+
 @Composable private fun PlayerScreen(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,track:Track?,play:(Track)->Unit,previous:()->Unit,back:()->Unit){
-    val context=LocalContext.current;val playerPrefs=remember{context.getSharedPreferences("player_settings",0)}
-    var autoLyrics by remember{mutableStateOf(playerPrefs.getBoolean("auto_lyrics",true))};var showLyrics by remember(track?.id){mutableStateOf(autoLyrics)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope()
-    LaunchedEffect(track?.id){lyrics=null;track?.let{lyrics=runCatching{api.lyrics(it.id)}.getOrNull()};showLyrics=autoLyrics&&lyrics?.lines?.isNotEmpty()==true}
-    LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);playing=player.exo.isPlaying;delay(250)}}
-    val lines=lyrics?.lines.orEmpty();val idx=lines.indexOfLast{it.timeMs<=pos}.coerceAtLeast(0)
+    val context=LocalContext.current;val playerPrefs=remember{context.getSharedPreferences("player_settings",0)};val lyricsApi=remember(api){LyricsApi(tokenProvider={api.token})}
+    var autoLyrics by remember{mutableStateOf(playerPrefs.getBoolean("auto_lyrics",true))};var showLyrics by remember(track?.id){mutableStateOf(autoLyrics)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var duration by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope()
+    LaunchedEffect(track?.id){lyrics=null;message=null;track?.let{t->runCatching{lyricsApi.load(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст: ${it.message}"}};showLyrics=autoLyrics&&lyrics?.lines?.isNotEmpty()==true}
+    LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track?.durationMs?:0L;playing=player.exo.isPlaying;delay(250)}}
+    val lines=lyrics?.lines.orEmpty();val idx=lines.indexOfLast{it.timeMs<=pos}.coerceAtLeast(0);val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
     Box(Modifier.fillMaxSize()){
         track?.coverUrl?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}
         Box(Modifier.fillMaxSize().background(Color(0xD9090A0D)))
         Column(Modifier.fillMaxSize(),verticalArrangement=Arrangement.spacedBy(14.dp)){
-            Row(verticalAlignment=Alignment.CenterVertically){Button(onClick=back){Text("← Назад")};Spacer(Modifier.weight(1f));Button(onClick={autoLyrics=!autoLyrics;playerPrefs.edit().putBoolean("auto_lyrics",autoLyrics).apply();if(autoLyrics&&lines.isNotEmpty())showLyrics=true}){Text(if(autoLyrics)"☑ Текст по умолчанию" else "☐ Текст по умолчанию")}}
+            Row(verticalAlignment=Alignment.CenterVertically){Button(onClick=back){Text("‹",fontSize=28.sp)};Spacer(Modifier.weight(1f));Button(onClick={autoLyrics=!autoLyrics;playerPrefs.edit().putBoolean("auto_lyrics",autoLyrics).apply();if(autoLyrics&&lines.isNotEmpty())showLyrics=true}){Text(if(autoLyrics)"✓ Текст" else "Текст")}}
             Row(Modifier.fillMaxWidth().weight(1f),horizontalArrangement=Arrangement.spacedBy(28.dp),verticalAlignment=Alignment.CenterVertically){
                 Box(Modifier.size(280.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xFF17181D))){track?.coverUrl?.let{AsyncImage(model=it,contentDescription=track.title,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
                 Column(Modifier.weight(1f),verticalArrangement=Arrangement.spacedBy(14.dp)){Text(track?.title?:"Плеер",fontSize=38.sp,color=Color.White);Text(track?.artist.orEmpty(),fontSize=23.sp,color=Color.LightGray)
-                    Row(horizontalArrangement=Arrangement.spacedBy(10.dp),verticalAlignment=Alignment.CenterVertically){
-                        Button(onClick=previous){Text("⏮",fontSize=26.sp)}
-                        Button(onClick={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()}){Text(if(playing)"⏸" else "▶",fontSize=28.sp)}
-                        Button(onClick={scope.launch{runCatching{wave.next(player.exo.currentPosition/1000,true)}.onSuccess{it?.let(play)}.onFailure{message=it.message}}}){Text("⏭",fontSize=26.sp)}
-                        Button(onClick={scope.launch{runCatching{wave.likeCurrent()}.onSuccess{message="Добавлено в любимое ♥"}.onFailure{message=it.message}}}){Text("♥",fontSize=25.sp)}
-                        Button(onClick={if(lines.isNotEmpty())showLyrics=!showLyrics else message="Текст для этой песни не найден"}){Text("≡♪",fontSize=24.sp)}
+                    LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(5.dp)))
+                    Row(Modifier.fillMaxWidth()){Text(clock(pos),color=Color.LightGray,fontSize=14.sp);Spacer(Modifier.weight(1f));Text(clock(duration),color=Color.LightGray,fontSize=14.sp)}
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp),verticalAlignment=Alignment.CenterVertically){
+                        Button(onClick=previous,contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("⏮",fontSize=23.sp)}
+                        Button(onClick={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()},contentPadding=PaddingValues(horizontal=22.dp,vertical=14.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=27.sp)}
+                        Button(onClick={scope.launch{runCatching{wave.next(player.exo.currentPosition/1000,true)}.onSuccess{it?.let(play)}.onFailure{message=it.message}}},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("⏭",fontSize=23.sp)}
+                        Button(onClick={scope.launch{runCatching{wave.likeCurrent()}.onSuccess{message="Добавлено в любимое ♥"}.onFailure{message=it.message}}},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("♡",fontSize=24.sp)}
+                        Button(onClick={if(lines.isNotEmpty())showLyrics=!showLyrics else message="Текст для этой песни не найден"},contentPadding=PaddingValues(horizontal=18.dp,vertical=12.dp)){Text("≡",fontSize=25.sp)}
                     }
-                    message?.let{Text(it,color=YandexYellow)}
+                    message?.let{Text(it,color=YandexYellow,fontSize=14.sp)}
                     if(showLyrics&&lines.isNotEmpty())Column(verticalArrangement=Arrangement.spacedBy(9.dp)){lines.getOrNull(idx-1)?.let{Text(it.text,fontSize=20.sp,color=Color.Gray)};lines.getOrNull(idx)?.let{Text(it.text,fontSize=30.sp,color=YandexYellow)};lines.getOrNull(idx+1)?.let{Text(it.text,fontSize=20.sp,color=Color.LightGray)}}
                 }
             }

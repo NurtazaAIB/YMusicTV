@@ -19,7 +19,9 @@ class LyricsApi(
     companion object {
         private const val API = "https://api.music.yandex.net"
         private const val SIGN_KEY = "p93jhgh689SBReK6ghtw62"
-        private const val USER_AGENT = "MusicTV/0.9.8.7 AndroidTV"\n        // Current official Android client identifies itself with this API header.\n        private const val MUSIC_CLIENT = "YandexMusicAndroid/24026442"
+        private const val USER_AGENT = "MusicTV/0.9.8.7 AndroidTV"
+        // Current official Android client identifies itself with this API header.
+        private const val MUSIC_CLIENT = "YandexMusicAndroid/24026442"
     }
 
     suspend fun load(trackId: String): Lyrics? = withContext(Dispatchers.IO) {
@@ -36,7 +38,8 @@ class LyricsApi(
     private fun builder(url: String) = Request.Builder()
         .url(url)
         .header("User-Agent", USER_AGENT)
-        .header("X-Yandex-Music-Client", MUSIC_CLIENT)\n        .header("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
+        .header("X-Yandex-Music-Client", MUSIC_CLIENT)
+        .header("Accept-Language", "ru-RU,ru;q=0.9,en;q=0.8")
         .header("Accept", "application/json, text/plain, */*")
         .apply { tokenProvider()?.takeIf { it.isNotBlank() }?.let { header("Authorization", "OAuth $it") } }
 
@@ -113,7 +116,9 @@ class LyricsApi(
 
     private fun plainLyrics(raw: String): Lyrics? {
         if (raw.isBlank()) return null
-        val lines = raw.replace("\r\n", "\n")
+        val lines = raw.replace("\r
+", "
+")
             .lineSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }

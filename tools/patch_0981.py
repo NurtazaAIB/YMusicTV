@@ -9,7 +9,12 @@ old_effect='''    LaunchedEffect(idx,lines.size,showLyrics){if(showLyrics&&synce
 new_effect='''    val nextTime=lines.getOrNull(idx+1)?.timeMs ?: (lines.getOrNull(idx)?.timeMs?.plus(4000L) ?: pos+4000L)
     val currentTime=lines.getOrNull(idx)?.timeMs ?: pos
     val lyricFraction=if(synced&&nextTime>currentTime)((pos-currentTime).toFloat()/(nextTime-currentTime).toFloat()).coerceIn(0f,1f) else 0f
-    val unsyncedPosition=if(!synced&&duration>0&&lines.size>1)(pos.toFloat()/duration.toFloat()*(lines.size-1)).coerceIn(0f,(lines.size-1).toFloat()) else 0f
+    val unsyncedPosition=if(!synced&&duration>0&&lines.size>1){
+        val start=(duration*0.06f).toLong()
+        val end=(duration*0.94f).toLong().coerceAtLeast(start+1L)
+        val p=((pos-start).toFloat()/(end-start).toFloat()).coerceIn(0f,1f)
+        p*(lines.size-1)
+    } else 0f
     val unsyncedIndex=unsyncedPosition.toInt()
     val unsyncedFraction=unsyncedPosition-unsyncedIndex'''
 if old_effect not in s: raise SystemExit('old lyric effect not found')
@@ -48,6 +53,8 @@ overlay='''        if(showLyrics&&lines.isNotEmpty()){
             }
         }
         Column(Modifier.fillMaxSize().padding(horizontal=48.dp,vertical=30.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){'''
+# Faster player position sampling makes lyric motion visibly smooth on TV.
+s=s.replace('playing=player.exo.isPlaying;delay(200)', 'playing=player.exo.isPlaying;delay(50)', 1)
 if needle not in s: raise SystemExit('main player column not found')
 s=s.replace(needle,overlay,1)
 p.write_text(s)

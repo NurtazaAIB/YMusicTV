@@ -27,9 +27,6 @@ android {
 
 kotlin {
     jvmToolchain(17)
-    compilerOptions {
-        freeCompilerArgs.add("-Xnon-local-break-continue")
-    }
 }
 
 dependencies {

@@ -109,10 +109,27 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
     }
 
     suspend fun homeSections(): List<HomeSection> {
-        val blocks = listOf("personalplaylists", "mixes", "new-playlists", "new-releases").joinToString(","); val result = getResult("$API/landing3?blocks=${URLEncoder.encode(blocks, "UTF-8")}"); val arr = result.optJSONArray("blocks") ?: JSONArray(); val sections = mutableListOf<HomeSection>()
-        for (i in 0 until arr.length()) { val block = arr.optJSONObject(i) ?: continue; val cards = mutableListOf<HomeCard>(); val entities = block.optJSONArray("entities") ?: JSONArray()
-            for (k in 0 until entities.length()) { val entity = entities.optJSONObject(k) ?: continue; val type = entity.optString("type"); val data0 = entity.optJSONObject("data") ?: continue; val data = if (type == "personal-playlist") data0.optJSONObject("data") ?: data0 else data0; val title = data.optString("title").ifBlank { data.optString("name") }.ifBlank { continue }; val coverRaw = data.optString("coverUri").ifBlank { data.optJSONObject("cover")?.optString("uri").orEmpty() }; val cover = coverRaw.takeIf { it.isNotBlank() }?.replace("%%", "400x400")?.let { if (it.startsWith("http")) it else "https://$it" }; cards += HomeCard(title,data.optString("description"),cover,type,data.opt("id")?.toString().orEmpty(),data.opt("uid")?.toString(),data.opt("kind")?.toString()) }
-            if (cards.isNotEmpty()) sections += HomeSection(block.optString("title").ifBlank { "Для вас" }, cards.take(20)) }
+        val blocks = listOf("personalplaylists", "mixes", "new-playlists", "new-releases").joinToString(",")
+        val result = getResult("$API/landing3?blocks=${URLEncoder.encode(blocks, "UTF-8")}")
+        val arr = result.optJSONArray("blocks") ?: JSONArray()
+        val sections = mutableListOf<HomeSection>()
+        for (i in 0 until arr.length()) {
+            val block = arr.optJSONObject(i) ?: continue
+            val cards = mutableListOf<HomeCard>()
+            val entities = block.optJSONArray("entities") ?: JSONArray()
+            for (k in 0 until entities.length()) {
+                val entity = entities.optJSONObject(k) ?: continue
+                val type = entity.optString("type")
+                val data0 = entity.optJSONObject("data") ?: continue
+                val data = if (type == "personal-playlist") data0.optJSONObject("data") ?: data0 else data0
+                val rawTitle = data.optString("title").ifBlank { data.optString("name") }
+                if (rawTitle.isBlank()) continue
+                val coverRaw = data.optString("coverUri").ifBlank { data.optJSONObject("cover")?.optString("uri").orEmpty() }
+                val cover = coverRaw.takeIf { it.isNotBlank() }?.replace("%%", "400x400")?.let { if (it.startsWith("http")) it else "https://$it" }
+                cards += HomeCard(rawTitle, data.optString("description"), cover, type, data.opt("id")?.toString().orEmpty(), data.opt("uid")?.toString(), data.opt("kind")?.toString())
+            }
+            if (cards.isNotEmpty()) sections += HomeSection(block.optString("title").ifBlank { "Для вас" }, cards.take(20))
+        }
         return sections
     }
 

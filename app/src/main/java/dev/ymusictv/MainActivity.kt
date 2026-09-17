@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import coil.compose.AsyncImage
-import dev.ymusictv.api.LyricsApi
 import dev.ymusictv.api.WaveRestrictionsApi
 import dev.ymusictv.api.YandexMusicApi
 import dev.ymusictv.model.*
@@ -112,9 +111,8 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
 private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return "%d:%02d".format(total/60,total%60) }
 
 @Composable private fun PlayerScreen(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,track:Track?,play:(Track)->Unit,previous:()->Unit,back:()->Unit){
-    val lyricsApi=remember(api){LyricsApi(tokenProvider={api.token})}
     var showLyrics by remember(track?.id){mutableStateOf(true)};var lyrics by remember{mutableStateOf<Lyrics?>(null)};var pos by remember{mutableLongStateOf(0L)};var duration by remember{mutableLongStateOf(0L)};var playing by remember{mutableStateOf(player.exo.isPlaying)};var message by remember{mutableStateOf<String?>(null)};val scope=rememberCoroutineScope();val lyricState=rememberLazyListState()
-    LaunchedEffect(track?.id){lyrics=null;message=null;showLyrics=true;track?.let{t->runCatching{lyricsApi.load(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст недоступен"}}}
+    LaunchedEffect(track?.id){lyrics=null;message=null;showLyrics=true;track?.let{t->runCatching{api.lyrics(t.id)}.onSuccess{lyrics=it}.onFailure{message="Текст недоступен"}}}
     LaunchedEffect(Unit){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track?.durationMs?:0L;playing=player.exo.isPlaying;delay(200)}}
     val lines=lyrics?.lines.orEmpty();val synced=lyrics?.synced==true;val idx=if(synced)lines.indexOfLast{it.timeMs<=pos}.coerceAtLeast(0) else 0;val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
     LaunchedEffect(idx,lines.size,showLyrics){if(showLyrics&&synced&&lines.isNotEmpty())lyricState.animateScrollToItem((idx-2).coerceAtLeast(0))}

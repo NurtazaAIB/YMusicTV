@@ -8,7 +8,10 @@ if 'import androidx.compose.ui.graphics.graphicsLayer' not in s:
 old_effect='''    LaunchedEffect(idx,lines.size,showLyrics){if(showLyrics&&synced&&lines.isNotEmpty())lyricState.animateScrollToItem((idx-2).coerceAtLeast(0))}'''
 new_effect='''    val nextTime=lines.getOrNull(idx+1)?.timeMs ?: (lines.getOrNull(idx)?.timeMs?.plus(4000L) ?: pos+4000L)
     val currentTime=lines.getOrNull(idx)?.timeMs ?: pos
-    val lyricFraction=if(synced&&nextTime>currentTime)((pos-currentTime).toFloat()/(nextTime-currentTime).toFloat()).coerceIn(0f,1f) else 0f'''
+    val lyricFraction=if(synced&&nextTime>currentTime)((pos-currentTime).toFloat()/(nextTime-currentTime).toFloat()).coerceIn(0f,1f) else 0f
+    val unsyncedPosition=if(!synced&&duration>0&&lines.size>1)(pos.toFloat()/duration.toFloat()*(lines.size-1)).coerceIn(0f,(lines.size-1).toFloat()) else 0f
+    val unsyncedIndex=unsyncedPosition.toInt()
+    val unsyncedFraction=unsyncedPosition-unsyncedIndex'''
 if old_effect not in s: raise SystemExit('old lyric effect not found')
 s=s.replace(old_effect,new_effect)
 old='''                    message?.let{Text(it,color=Color(0xFFD6B5FF),fontSize=13.sp)}
@@ -27,21 +30,19 @@ needle='''        Column(Modifier.fillMaxSize().padding(horizontal=48.dp,vertica
 overlay='''        if(showLyrics&&lines.isNotEmpty()){
             Box(Modifier.fillMaxSize().padding(start=386.dp,end=48.dp,top=54.dp),contentAlignment=Alignment.TopCenter){
                 Box(Modifier.fillMaxWidth().height(108.dp).graphicsLayer { clip = true }){
-                    if(synced){
-                        val visible=listOf(idx-1,idx,idx+1,idx+2)
-                        visible.forEach{lineIndex->
-                            lines.getOrNull(lineIndex)?.let{line->
-                                val relative=lineIndex-idx
-                                val baseY=(relative+1)*34f-lyricFraction*34f
-                                val center=((baseY+17f)/102f).coerceIn(0f,1f)
-                                val edgeDistance=kotlin.math.abs(center-.5f)*2f
-                                val alpha=(1f-edgeDistance*.82f).coerceIn(.08f,.94f)
-                                val blurDp=(edgeDistance*2.2f).dp
-                                Text(line.text,fontSize=20.sp,color=Color.White.copy(alpha=alpha),textAlign=TextAlign.Center,maxLines=1,modifier=Modifier.fillMaxWidth().offset(y=baseY.dp).blur(blurDp))
-                            }
+                    val activeIndex=if(synced)idx else unsyncedIndex
+                    val activeFraction=if(synced)lyricFraction else unsyncedFraction
+                    val visible=listOf(activeIndex-1,activeIndex,activeIndex+1,activeIndex+2)
+                    visible.forEach{lineIndex->
+                        lines.getOrNull(lineIndex)?.let{line->
+                            val relative=lineIndex-activeIndex
+                            val baseY=(relative+1)*34f-activeFraction*34f
+                            val center=((baseY+17f)/102f).coerceIn(0f,1f)
+                            val edgeDistance=kotlin.math.abs(center-.5f)*2f
+                            val alpha=(1f-edgeDistance*.88f).coerceIn(.03f,.94f)
+                            val blurDp=(edgeDistance*3.0f).dp
+                            Text(line.text,fontSize=20.sp,color=Color.White.copy(alpha=alpha),textAlign=TextAlign.Center,maxLines=1,modifier=Modifier.fillMaxWidth().offset(y=baseY.dp).blur(blurDp))
                         }
-                    }else{
-                        lines.take(3).forEachIndexed{i,line->Text(line.text,fontSize=20.sp,color=Color.White.copy(alpha=if(i==1).9f else .32f),textAlign=TextAlign.Center,maxLines=1,modifier=Modifier.fillMaxWidth().offset(y=(i*34).dp).then(if(i==1)Modifier else Modifier.blur(1.8.dp)))}
                     }
                 }
             }

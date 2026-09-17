@@ -7,7 +7,7 @@ import dev.ymusictv.model.WaveSettings
 
 /** My Wave backed by the current Yandex rotor/session protocol. */
 class WaveSession(private val api: YandexMusicApi) {
-    private val modern = ModernWaveApi { api.token }
+    private val modern = ModernWaveApi(tokenProvider = { api.token })
     private val queue = ArrayDeque<Track>()
     private var batchId: String? = null
     private var sessionId: String? = null

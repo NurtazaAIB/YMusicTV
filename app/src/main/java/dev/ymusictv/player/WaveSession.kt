@@ -13,16 +13,18 @@ class WaveSession(private val api: YandexMusicApi) {
 
     suspend fun start(newSettings: WaveSettings = settings): Track? {
         settings = newSettings
-        api.setWaveSettings(settings)
+        // Station settings are optional. Yandex may reject settings3 for some
+        // accounts/station configurations; that must never prevent My Wave itself.
+        runCatching { api.setWaveSettings(settings) }
         queue.clear(); batchId = null; current = null
-        api.waveFeedback("radioStarted")
+        runCatching { api.waveFeedback("radioStarted") }
         refill(null)
         return nextInternal()
     }
 
     suspend fun next(playedSeconds: Long, skipped: Boolean): Track? {
         current?.let { t ->
-            api.waveFeedback(if (skipped) "skip" else "trackFinished", t.id, batchId, playedSeconds)
+            runCatching { api.waveFeedback(if (skipped) "skip" else "trackFinished", t.id, batchId, playedSeconds) }
         }
         if (queue.size < 2) refill(current?.id)
         return nextInternal()
@@ -39,7 +41,7 @@ class WaveSession(private val api: YandexMusicApi) {
     private suspend fun nextInternal(): Track? {
         val t = queue.removeFirstOrNull() ?: return null
         current = t
-        api.waveFeedback("trackStarted", t.id, batchId)
+        runCatching { api.waveFeedback("trackStarted", t.id, batchId) }
         return t
     }
 

@@ -29,10 +29,10 @@ class LyricsApi(
         val numericId = fullId.substringBefore(':')
 
         // Always try the synchronized source first. Supplement is only a plain-text fallback.
-        runCatching { loadSigned(numericId, "LRC") }.getOrNull()
+        runCatching { loadSigned(fullId, numericId, "LRC") }.getOrNull()
             ?: loadSupplement(fullId)
             ?: if (numericId != fullId) loadSupplement(numericId) else null
-            ?: runCatching { loadSigned(numericId, "TEXT") }.getOrNull()
+            ?: runCatching { loadSigned(fullId, numericId, "TEXT") }.getOrNull()
     }
 
     private fun builder(url: String) = Request.Builder()
@@ -70,12 +70,12 @@ class LyricsApi(
         return plainLyrics(raw)
     }
 
-    private fun loadSigned(trackId: String, format: String): Lyrics? {
+    private fun loadSigned(requestTrackId: String, signingTrackId: String, format: String): Lyrics? {
         val timestamp = System.currentTimeMillis() / 1000L
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(SIGN_KEY.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        val signature = Base64.encodeToString(mac.doFinal("$trackId$timestamp".toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
-        val url = "$API/tracks/$trackId/lyrics".toHttpUrl().newBuilder()
+        val signature = Base64.encodeToString(mac.doFinal("$signingTrackId$timestamp".toByteArray(Charsets.UTF_8)), Base64.NO_WRAP)
+        val url = "$API/tracks/$requestTrackId/lyrics".toHttpUrl().newBuilder()
             .addQueryParameter("format", format)
             .addQueryParameter("timeStamp", timestamp.toString())
             .addQueryParameter("sign", signature)
@@ -86,7 +86,7 @@ class LyricsApi(
         }
         val result = envelope.optJSONObject("result") ?: envelope
         val download = result.optString("downloadUrl").takeIf { it.isNotBlank() } ?: return null
-        val raw = http.newCall(builder(download).get().build()).execute().use { r ->
+        val raw = http.newCall(Request.Builder().url(download).get().build()).execute().use { r ->
             if (!r.isSuccessful) return null
             r.body?.string().orEmpty().removePrefix("\uFEFF")
         }

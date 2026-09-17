@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -8,7 +10,7 @@ val encodedTestKey = rootProject.file(".github/ymusictv-test.keystore.b64")
 val stableTestKey = layout.buildDirectory.file("ymusictv-test.keystore").get().asFile
 if (encodedTestKey.exists()) {
     stableTestKey.parentFile.mkdirs()
-    stableTestKey.writeBytes(java.util.Base64.getDecoder().decode(encodedTestKey.readText().trim()))
+    stableTestKey.writeBytes(Base64.getDecoder().decode(encodedTestKey.readText().trim()))
 }
 
 android {

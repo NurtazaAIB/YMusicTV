@@ -27,19 +27,43 @@ import dev.ymusictv.player.WaveSession
 import dev.ymusictv.ui.HomePoster
 import dev.ymusictv.ui.TrackRow
 import dev.ymusictv.ui.YandexYellow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { YMusicTvApp() } }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                getSharedPreferences("diagnostics", MODE_PRIVATE).edit()
+                    .putString("last_crash", throwable.stackTraceToString().take(12000))
+                    .putLong("last_crash_time", System.currentTimeMillis())
+                    .commit()
+            }
+            previousHandler?.uncaughtException(thread, throwable)
+        }
+        super.onCreate(savedInstanceState)
+        setContent { YMusicTvApp() }
+    }
 }
+
 enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
 
 @Composable fun YMusicTvApp() {
-    val context=LocalContext.current; val prefs=remember{context.getSharedPreferences("auth",0)}
-    val api=remember{YandexMusicApi().apply{token=prefs.getString("access_token",null)}}; val player=remember{TvPlayer(context)}; val wave=remember{WaveSession(api)}
-    DisposableEffect(Unit){onDispose{player.release()}}
-    var loggedIn by remember{mutableStateOf(false)}; var checkingAuth by remember{mutableStateOf(true)}; var code by remember{mutableStateOf<String?>(null)}; var url by remember{mutableStateOf<String?>(null)}; var error by remember{mutableStateOf<String?>(null)}; val scope=rememberCoroutineScope()
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("auth", 0) }
+    val diagnostics = remember { context.getSharedPreferences("diagnostics", 0) }
+    val api = remember { YandexMusicApi().apply { token = prefs.getString("access_token", null) } }
+    var loggedIn by remember { mutableStateOf(false) }
+    var checkingAuth by remember { mutableStateOf(true) }
+    var code by remember { mutableStateOf<String?>(null) }
+    var url by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var authInProgress by remember { mutableStateOf(false) }
+    var lastCrash by remember { mutableStateOf(diagnostics.getString("last_crash", null)) }
+    val scope = rememberCoroutineScope()
+
     LaunchedEffect(Unit) {
         val saved = prefs.getString("access_token", null)
         val refresh = prefs.getString("refresh_token", null)
@@ -49,22 +73,85 @@ enum class Screen { MUSIC, AUDIO, SEARCH, PLAYER }
             if (ok) loggedIn = true
             else if (!refresh.isNullOrBlank()) {
                 runCatching { api.refreshAccessToken(refresh) }.onSuccess { t ->
-                    prefs.edit().putString("access_token", t.accessToken).putString("refresh_token", t.refreshToken).putLong("expires_at", System.currentTimeMillis() + ((t.expiresIn ?: 3600) * 1000L)).apply()
+                    prefs.edit().putString("access_token", t.accessToken).putString("refresh_token", t.refreshToken)
+                        .putLong("expires_at", System.currentTimeMillis() + ((t.expiresIn ?: 3600) * 1000L)).apply()
                     loggedIn = true
                 }
             }
         }
         checkingAuth = false
     }
-    MaterialTheme { Box(Modifier.fillMaxSize().background(Color(0xFF090A0D)).padding(38.dp)) {
-        if (checkingAuth) Column(verticalArrangement=Arrangement.spacedBy(18.dp)) {
-            Text("YMusic TV",fontSize=46.sp,color=YandexYellow); Text("Проверяем авторизацию…",color=Color.LightGray)
-        } else if(!loggedIn) Column(verticalArrangement=Arrangement.spacedBy(18.dp)){
-            Text("YMusic TV",fontSize=46.sp,color=YandexYellow); Text("Яндекс Музыка для Android TV",fontSize=21.sp,color=Color.LightGray)
-            Button(onClick={scope.launch{error=null;runCatching{api.requestDeviceCode()}.onSuccess{d->code=d.userCode;url=d.verificationUrl;repeat((d.expiresIn/d.interval).coerceAtLeast(1)){delay(d.interval*1000L);val t=api.pollDeviceToken(d.deviceCode);if(t!=null){prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).putLong("expires_at", System.currentTimeMillis() + ((t.expiresIn ?: 3600) * 1000L)).apply();loggedIn=true;return@launch}};error="Код авторизации истёк"}.onFailure{error=it.message}}}){Text(if(code==null)"Войти в Яндекс" else "Получить новый код")}
-            code?.let{Text("Код: $it",fontSize=40.sp,color=Color(0xFFFFDB4D))};url?.let{Text("Откройте на телефоне: $it",color=Color.White)};error?.let{Text(it,color=Color(0xFFFF8A80))}
-        } else Home(api,player,wave){prefs.edit().clear().apply();api.token=null;loggedIn=false}
-    }}
+
+    MaterialTheme {
+        Box(Modifier.fillMaxSize().background(Color(0xFF090A0D)).padding(38.dp)) {
+            if (checkingAuth) {
+                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Text("YMusic TV", fontSize = 46.sp, color = YandexYellow)
+                    Text("Проверяем авторизацию…", color = Color.LightGray)
+                }
+            } else if (!loggedIn) {
+                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    Text("YMusic TV", fontSize = 46.sp, color = YandexYellow)
+                    Text("Яндекс Музыка для Android TV • diagnostic 0.9.2", fontSize = 21.sp, color = Color.LightGray)
+                    Button(onClick = {
+                        if (!authInProgress) scope.launch {
+                            authInProgress = true
+                            error = null
+                            try {
+                                val d = api.requestDeviceCode()
+                                code = d.userCode
+                                url = d.verificationUrl
+                                val intervalSec = d.interval.coerceAtLeast(1)
+                                val attempts = (d.expiresIn / intervalSec).coerceAtLeast(1)
+                                repeat(attempts) {
+                                    delay(intervalSec * 1000L)
+                                    val poll = runCatching { api.pollDeviceToken(d.deviceCode) }
+                                    if (poll.isFailure) {
+                                        val e = poll.exceptionOrNull()
+                                        error = "OAuth poll: ${e?.javaClass?.simpleName ?: "Error"}: ${e?.message ?: "без описания"}"
+                                        return@launch
+                                    }
+                                    val t = poll.getOrNull()
+                                    if (t != null) {
+                                        prefs.edit().putString("access_token", t.accessToken).putString("refresh_token", t.refreshToken)
+                                            .putLong("expires_at", System.currentTimeMillis() + ((t.expiresIn ?: 3600) * 1000L)).apply()
+                                        diagnostics.edit().remove("last_crash").remove("last_crash_time").apply()
+                                        lastCrash = null
+                                        loggedIn = true
+                                        return@launch
+                                    }
+                                }
+                                error = "Код авторизации истёк"
+                            } catch (e: CancellationException) {
+                                throw e
+                            } catch (e: Throwable) {
+                                error = "Ошибка входа: ${e.javaClass.simpleName}: ${e.message ?: "без описания"}"
+                            } finally {
+                                authInProgress = false
+                            }
+                        }
+                    }) { Text(if (authInProgress) "Ожидание подтверждения…" else if (code == null) "Войти в Яндекс" else "Получить новый код") }
+                    code?.let { Text("Код: $it", fontSize = 40.sp, color = Color(0xFFFFDB4D)) }
+                    url?.let { Text("Откройте на телефоне: $it", color = Color.White) }
+                    error?.let { Text(it, color = Color(0xFFFF8A80), fontSize = 18.sp) }
+                    lastCrash?.let { crash ->
+                        Text("Предыдущий сбой приложения:", color = Color(0xFFFFB74D), fontSize = 16.sp)
+                        Text(crash.take(1200), color = Color(0xFFFFCCBC), fontSize = 12.sp)
+                        Button(onClick = { diagnostics.edit().remove("last_crash").remove("last_crash_time").apply(); lastCrash = null }) { Text("Очистить ошибку") }
+                    }
+                }
+            } else {
+                val player = remember { TvPlayer(context) }
+                val wave = remember { WaveSession(api) }
+                DisposableEffect(Unit) { onDispose { player.release() } }
+                Home(api, player, wave) {
+                    prefs.edit().clear().apply()
+                    api.token = null
+                    loggedIn = false
+                }
+            }
+        }
+    }
 }
 
 @Composable private fun Home(api:YandexMusicApi, player:TvPlayer, wave:WaveSession, logout:()->Unit){

@@ -22,9 +22,8 @@ s=s.replace(old,new)
 needle='''        Column(Modifier.fillMaxSize().padding(horizontal=48.dp,vertical=30.dp),verticalArrangement=Arrangement.spacedBy(12.dp)){'''
 overlay='''        if(showLyrics&&lines.isNotEmpty()){
             Box(Modifier.fillMaxSize().padding(start=386.dp,end=48.dp,top=54.dp),contentAlignment=Alignment.TopCenter){
-                Box(Modifier.fillMaxWidth().height(108.dp).clipToBounds()){
+                Box(Modifier.fillMaxWidth().height(108.dp).clip(androidx.compose.foundation.shape.RectangleShape)){
                     if(synced){
-                        val rowH=34.dp
                         val visible=listOf(idx-1,idx,idx+1,idx+2)
                         visible.forEach{lineIndex->
                             lines.getOrNull(lineIndex)?.let{line->

@@ -3,7 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <application android:theme="@style/Theme.YMusicTV" android:label="YMusic TV" android:banner="@drawable/tv_banner" android:usesCleartextTraffic="false" android:allowBackup="false">
+    <application android:theme="@style/Theme.YMusicTV" android:label="Музыка" android:banner="@drawable/tv_banner" android:usesCleartextTraffic="false" android:allowBackup="false">
         <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

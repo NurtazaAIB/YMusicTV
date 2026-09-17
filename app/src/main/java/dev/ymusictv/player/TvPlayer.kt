@@ -12,19 +12,21 @@ class TvPlayer(context: Context) {
     private val appContext = context.applicationContext
     private var endedCallback: (() -> Unit)? = null
     private var errorCallback: ((PlaybackException) -> Unit)? = null
+    private var player: ExoPlayer? = null
 
-    val exo: ExoPlayer by lazy(LazyThreadSafetyMode.NONE) {
-        ExoPlayer.Builder(appContext).build().also { player ->
-            player.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_ENDED) endedCallback?.invoke()
-                }
+    val exo: ExoPlayer
+        get() = player ?: createPlayer().also { player = it }
 
-                override fun onPlayerError(error: PlaybackException) {
-                    errorCallback?.invoke(error)
-                }
-            })
-        }
+    private fun createPlayer(): ExoPlayer = ExoPlayer.Builder(appContext).build().also { p ->
+        p.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_ENDED) endedCallback?.invoke()
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                errorCallback?.invoke(error)
+            }
+        })
     }
 
     fun play(track: Track, url: String) {
@@ -41,8 +43,7 @@ class TvPlayer(context: Context) {
     fun onError(block: (PlaybackException) -> Unit) { errorCallback = block }
 
     fun release() {
-        if ((::class.java.getDeclaredField("exo\$delegate").apply { isAccessible = true }.get(this) as Lazy<*>).isInitialized()) {
-            exo.release()
-        }
+        player?.release()
+        player = null
     }
 }

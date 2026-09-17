@@ -7,6 +7,7 @@ plugins {
 android {
     namespace = "dev.ymusictv"
     compileSdk = 35
+
     defaultConfig {
         applicationId = "dev.ymusictv"
         minSdk = 28
@@ -14,8 +15,18 @@ android {
         versionCode = 9
         versionName = "0.9.0"
     }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
     buildFeatures { compose = true; buildConfig = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+}
+
+kotlin {
+    jvmToolchain(17)
 }
 
 dependencies {

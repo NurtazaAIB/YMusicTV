@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -100,7 +101,7 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
 }
 
 @Composable private fun Home(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,logout:()->Unit){
-    var screen by remember{mutableStateOf(Screen.MUSIC)};var returnScreen by remember{mutableStateOf(Screen.MUSIC)};var artistId by remember{mutableStateOf<String?>(null)};var name by remember{mutableStateOf("…")};var now by remember{mutableStateOf<Track?>(null)};val history=remember{mutableStateListOf<Track>()};val scope=rememberCoroutineScope();LaunchedEffect(Unit){runCatching{api.accountName()}.onSuccess{name=it}};var retry by remember{mutableStateOf<String?>(null)}
+    var screen by remember{mutableStateOf(Screen.MUSIC)};var confirmLogout by remember{mutableStateOf(false)};var returnScreen by remember{mutableStateOf(Screen.MUSIC)};var artistId by remember{mutableStateOf<String?>(null)};var name by remember{mutableStateOf("…")};var now by remember{mutableStateOf<Track?>(null)};val history=remember{mutableStateListOf<Track>()};val scope=rememberCoroutineScope();LaunchedEffect(Unit){runCatching{api.accountName()}.onSuccess{name=it}};var retry by remember{mutableStateOf<String?>(null)}
     var queue by remember{mutableStateOf<List<Track>>(emptyList())};var queueIndex by remember{mutableIntStateOf(-1)};var waveMode by remember{mutableStateOf(false)}
     fun play(t:Track,rememberPrevious:Boolean=true){scope.launch{runCatching{api.audioUrl(t.id)}.onSuccess{url->if(rememberPrevious){now?.takeIf{it.id!=t.id}?.let{history.add(it)}};player.play(t,url);now=t;screen=Screen.PLAYER}}}
     fun playFromQueue(list:List<Track>,index:Int){if(index !in list.indices)return;queue=list;queueIndex=index;waveMode=false;play(list[index])}
@@ -111,9 +112,31 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
     if(screen==Screen.PLAYER){
         PlayerScreen(api,player,wave,now,{play(it)},::previous,::next,{id->artistId=id;screen=Screen.ARTIST}){screen=returnScreen}
     } else Column(Modifier.fillMaxSize().padding(38.dp).onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
-        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);now?.let{Button(onClick={screen=Screen.PLAYER}){Text("♫ ${it.title.take(24)}")}};GlassButton("Выйти", logout)}
+        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);GlassButton("Выйти",{confirmLogout=true})}
         Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TvNavButton("Музыка",screen==Screen.MUSIC){screen=Screen.MUSIC};TvNavButton("Любимое",screen==Screen.FAVORITES){screen=Screen.FAVORITES};TvNavButton("Аудио",screen==Screen.AUDIO){screen=Screen.AUDIO};TvNavButton("Поиск",screen==Screen.SEARCH){screen=Screen.SEARCH}}
-        when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.FAVORITES->FavoritesScreen(api){list,i->returnScreen=Screen.FAVORITES;playFromQueue(list,i)};Screen.AUDIO->AudioScreen(api){list,i->returnScreen=Screen.AUDIO;playFromQueue(list,i)};Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}
+        Box(Modifier.weight(1f).fillMaxWidth()){when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.FAVORITES->FavoritesScreen(api){list,i->returnScreen=Screen.FAVORITES;playFromQueue(list,i)};Screen.AUDIO->AudioScreen(api){list,i->returnScreen=Screen.AUDIO;playFromQueue(list,i)};Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}}
+        now?.let{t->MiniPlayer(t,player,onOpen={returnScreen=screen;screen=Screen.PLAYER},onToggle={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()})}
+    }
+    if(confirmLogout) AlertDialog(onDismissRequest={confirmLogout=false},title={Text("Выйти из аккаунта?")},text={Text("Точно выйти из Яндекс Музыки на этом телевизоре?")},confirmButton={Button(onClick={confirmLogout=false;logout()}){Text("Выйти")}},dismissButton={Button(onClick={confirmLogout=false}){Text("Отмена")}})
+}
+
+@Composable private fun MiniPlayer(track:Track,player:TvPlayer,onOpen:()->Unit,onToggle:()->Unit){
+    var pos by remember(track.id){mutableLongStateOf(0L)}
+    var duration by remember(track.id){mutableLongStateOf(track.durationMs)}
+    var playing by remember(track.id){mutableStateOf(player.exo.isPlaying)}
+    LaunchedEffect(track.id){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track.durationMs;playing=player.exo.isPlaying;delay(300)}}
+    val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xD815171C))){
+        Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal=10.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+            Button(onClick=onOpen,modifier=Modifier.weight(1f).fillMaxHeight(),contentPadding=PaddingValues(horizontal=8.dp)){
+                Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
+                    Box(Modifier.size(50.dp).clip(RoundedCornerShape(9.dp)).background(Color(0xFF25272E))){track.coverUrl?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
+                    Column(Modifier.weight(1f)){Text(track.title,maxLines=1,color=Color.White,fontSize=17.sp);Text(track.artist,maxLines=1,color=Color.LightGray,fontSize=13.sp)}
+                }
+            }
+            Button(onClick=onToggle,modifier=Modifier.size(54.dp),contentPadding=PaddingValues(0.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=21.sp)}
+        }
+        LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(3.dp))
     }
 }
 

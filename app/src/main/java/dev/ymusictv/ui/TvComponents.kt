@@ -41,6 +41,7 @@ fun TvNavButton(text:String, selected:Boolean=false, onClick:()->Unit) {
         onClick=onClick,
         modifier=Modifier.height(48.dp).onFocusChanged{ focused=it.isFocused },
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(15.dp)),
+        scale=ButtonDefaults.scale(focusedScale=1.01f, pressedScale=0.99f),
         colors=ButtonDefaults.colors(
             containerColor=bg,
             contentColor=if(active) Color.White else Color(0xFFD5D5D8),
@@ -77,6 +78,7 @@ fun HomePoster(card:HomeCard, onClick:()->Unit) {
         onClick=onClick,
         modifier=Modifier.width(205.dp).height(166.dp).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(16.dp)),
+        scale=ButtonDefaults.scale(focusedScale=1.01f, pressedScale=0.99f),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,
             focusedContainerColor=FocusGlassSoft, focusedContentColor=Color.White,
@@ -101,6 +103,7 @@ fun TrackRow(track:Track, playing:Boolean=false, onClick:()->Unit) {
         onClick=onClick,
         modifier=Modifier.fillMaxWidth().height(64.dp).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(14.dp)),
+        scale=ButtonDefaults.scale(focusedScale=1.01f, pressedScale=0.99f),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,
             focusedContainerColor=FocusGlassSoft, focusedContentColor=Color.White,

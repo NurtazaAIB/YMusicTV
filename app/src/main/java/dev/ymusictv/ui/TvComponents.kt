@@ -1,7 +1,6 @@
 package dev.ymusictv.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -38,11 +36,10 @@ private val Transparent = Color.Transparent
 fun TvNavButton(text:String, selected:Boolean=false, onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
     val active = focused || selected
-    val scale by animateFloatAsState(if(focused) 1.07f else 1f, tween(140), label="navScale")
     val bg by animateColorAsState(if(active) FocusGlass else Transparent, tween(140), label="navBg")
     Button(
         onClick=onClick,
-        modifier=Modifier.height(48.dp).scale(scale).onFocusChanged{ focused=it.isFocused },
+        modifier=Modifier.height(48.dp).onFocusChanged{ focused=it.isFocused },
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(15.dp)),
         colors=ButtonDefaults.colors(
             containerColor=bg,
@@ -58,11 +55,10 @@ fun TvNavButton(text:String, selected:Boolean=false, onClick:()->Unit) {
 @Composable
 fun GlassButton(text:String, onClick:()->Unit, modifier:Modifier=Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if(focused) 1.06f else 1f, tween(140), label="glassScale")
     val bg by animateColorAsState(if(focused) FocusGlass else Transparent, tween(140), label="glassBg")
     Button(
         onClick=onClick,
-        modifier=modifier.height(48.dp).scale(scale).onFocusChanged{focused=it.isFocused},
+        modifier=modifier.height(48.dp).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(15.dp)),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,
@@ -76,11 +72,10 @@ fun GlassButton(text:String, onClick:()->Unit, modifier:Modifier=Modifier) {
 @Composable
 fun HomePoster(card:HomeCard, onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(1f, tween(150), label="posterScale")
     val bg by animateColorAsState(if(focused) FocusGlassSoft else Transparent, tween(150), label="posterBg")
     Button(
         onClick=onClick,
-        modifier=Modifier.width(205.dp).height(166.dp).scale(scale).onFocusChanged{focused=it.isFocused},
+        modifier=Modifier.width(205.dp).height(166.dp).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(16.dp)),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,
@@ -101,11 +96,10 @@ fun HomePoster(card:HomeCard, onClick:()->Unit) {
 @Composable
 fun TrackRow(track:Track, playing:Boolean=false, onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(1f, tween(120), label="trackScale")
     val bg by animateColorAsState(if(focused) FocusGlassSoft else Transparent, tween(120), label="trackBg")
     Button(
         onClick=onClick,
-        modifier=Modifier.fillMaxWidth().height(64.dp).scale(scale).onFocusChanged{focused=it.isFocused},
+        modifier=Modifier.fillMaxWidth().height(64.dp).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(14.dp)),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,

@@ -76,11 +76,11 @@ fun GlassButton(text:String, onClick:()->Unit, modifier:Modifier=Modifier) {
 @Composable
 fun HomePoster(card:HomeCard, onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if(focused) 1.045f else 1f, tween(150), label="posterScale")
+    val scale by animateFloatAsState(1f, tween(150), label="posterScale")
     val bg by animateColorAsState(if(focused) FocusGlassSoft else Transparent, tween(150), label="posterBg")
     Button(
         onClick=onClick,
-        modifier=Modifier.width(205.dp).height(190.dp).scale(scale).onFocusChanged{focused=it.isFocused},
+        modifier=Modifier.width(205.dp).height(166.dp).scale(scale).onFocusChanged{focused=it.isFocused},
         shape=ButtonDefaults.shape(shape=RoundedCornerShape(16.dp)),
         colors=ButtonDefaults.colors(
             containerColor=bg, contentColor=Color.White,
@@ -94,7 +94,6 @@ fun HomePoster(card:HomeCard, onClick:()->Unit) {
                 card.coverUrl?.let { AsyncImage(model=it, contentDescription=card.title, modifier=Modifier.fillMaxSize(), contentScale=ContentScale.Crop) }
             }
             Text(card.title, maxLines=2, overflow=TextOverflow.Ellipsis, fontWeight=FontWeight.SemiBold, fontSize=15.sp)
-            if(card.subtitle.isNotBlank()) Text(card.subtitle, maxLines=1, overflow=TextOverflow.Ellipsis, fontSize=12.sp, color=Color.LightGray)
         }
     }
 }
@@ -102,7 +101,7 @@ fun HomePoster(card:HomeCard, onClick:()->Unit) {
 @Composable
 fun TrackRow(track:Track, playing:Boolean=false, onClick:()->Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if(focused) 1.012f else 1f, tween(120), label="trackScale")
+    val scale by animateFloatAsState(1f, tween(120), label="trackScale")
     val bg by animateColorAsState(if(focused) FocusGlassSoft else Transparent, tween(120), label="trackBg")
     Button(
         onClick=onClick,

@@ -94,7 +94,7 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
         else if(!loggedIn) Column(Modifier.padding(38.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){ Text("Музыка",fontSize=46.sp,color=YandexYellow); Text("Яндекс Музыка для Android TV",fontSize=21.sp,color=Color.LightGray)
             Button(onClick={if(!authInProgress)scope.launch{authInProgress=true;error=null;try{val d=api.requestDeviceCode();code=d.userCode;url=d.verificationUrl;val interval=d.interval.coerceAtLeast(1);repeat((d.expiresIn/interval).coerceAtLeast(1)){delay(interval*1000L);val poll=runCatching{api.pollDeviceToken(d.deviceCode)};if(poll.isFailure){error="OAuth: ${poll.exceptionOrNull()?.message}";return@launch};poll.getOrNull()?.let{t->prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).apply();diagnostics.edit().clear().apply();lastCrash=null;loggedIn=true;return@launch}};error="Код авторизации истёк"}catch(e:CancellationException){throw e}catch(e:Throwable){error="Ошибка входа: ${e.message}"}finally{authInProgress=false}}}){Text(if(authInProgress)"Ожидание подтверждения…" else "Войти в Яндекс")};code?.let{Text("Код: $it",fontSize=40.sp,color=YandexYellow)};url?.let{Text("Откройте на телефоне: $it",color=Color.White)};error?.let{Text(it,color=Color(0xFFFF8A80))};lastCrash?.let{Text(it.take(1000),color=Color(0xFFFFCCBC),fontSize=12.sp)} }
         else { val player=remember{TvPlayer(context)};val wave=remember{WaveSession(api)};DisposableEffect(Unit){onDispose{player.release()}};Home(api,player,wave){prefs.edit().clear().apply();api.token=null;loggedIn=false} }
-    }}}
+    }}
 }
 
 @Composable private fun Home(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,logout:()->Unit){

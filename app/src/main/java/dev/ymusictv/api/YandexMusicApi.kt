@@ -248,6 +248,42 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
         return List(ids.length()) { i -> HomeCard(title="Подкаст ${i+1}", type="podcast", id=ids.opt(i).toString()) }
     }
 
+    private suspend fun uid(): String {
+        accountUid?.let { return it }
+        accountName()
+        return accountUid ?: throw IOException("Не удалось определить аккаунт")
+    }
+
+    suspend fun likedTracks(): List<Track> {
+        val userId = uid()
+        val result = getResult("$API/users/$userId/likes/tracks")
+        val library = result.optJSONObject("library") ?: return emptyList()
+        val arr = library.optJSONArray("tracks") ?: JSONArray()
+        val ids = mutableListOf<String>()
+        for (i in 0 until arr.length()) {
+            val item = arr.optJSONObject(i) ?: continue
+            val id = item.opt("id")?.toString().orEmpty()
+            val albumId = item.opt("albumId")?.toString().orEmpty()
+            if (id.isNotBlank()) ids += if (albumId.isNotBlank()) "$id:$albumId" else id
+        }
+        if (ids.isEmpty()) return emptyList()
+        val out = mutableListOf<Track>()
+        ids.chunked(50).forEach { batch ->
+            val url = "$API/tracks?track-ids=" + URLEncoder.encode(batch.joinToString(","), "UTF-8")
+            val full = getResultArray(url)
+            for (i in 0 until full.length()) full.optJSONObject(i)?.let { out += parseTrack(it) }
+        }
+        return out
+    }
+
+    suspend fun likeTrack(trackId: String): Boolean = withContext(Dispatchers.IO) {
+        val userId = uid()
+        val body = FormBody.Builder().add("track-ids", trackId).build()
+        val req = authBuilder("$API/users/$userId/likes/tracks/add-multiple").post(body).build()
+        val j = executeJson(req)
+        j.has("result")
+    }
+
     suspend fun artistTracks(artistId: String, pageSize: Int = 50): List<Track> {
         val result = getResult("$API/artists/$artistId/tracks?page=0&page-size=$pageSize")
         val arr = result.optJSONArray("tracks") ?: JSONArray()

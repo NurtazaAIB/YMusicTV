@@ -13,11 +13,13 @@ class WaveSession(private val api: YandexMusicApi) {
     private var sessionId: String? = null
     private var current: Track? = null
     private var settings = WaveSettings()
+    private val recentIds = ArrayDeque<String>()
+    private val recentLimit = 100
 
     /** Starts a genuinely fresh Wave using Yandex serializedSeed values. */
     suspend fun start(newSettings: WaveSettings = settings): Track? {
         settings = newSettings
-        queue.clear(); batchId = null; sessionId = null; current = null
+        queue.clear(); recentIds.clear(); batchId = null; sessionId = null; current = null
 
         val batch = modern.start(settings)
         sessionId = batch.sessionId
@@ -51,8 +53,13 @@ class WaveSession(private val api: YandexMusicApi) {
     fun currentTrack(): Track? = current
 
     private suspend fun nextInternal(): Track? {
-        val t = queue.removeFirstOrNull() ?: return null
+        var t = queue.removeFirstOrNull()
+        while (t != null && recentIds.contains(t.id)) t = queue.removeFirstOrNull()
+        if (t == null) { refill(current?.id); t = queue.removeFirstOrNull() }
+        if (t == null) return null
         current = t
+        recentIds.addLast(t.id)
+        while (recentIds.size > recentLimit) recentIds.removeFirst()
         return t
     }
 
@@ -60,7 +67,7 @@ class WaveSession(private val api: YandexMusicApi) {
         val sid = sessionId ?: return
         val batch = modern.next(sid, after)
         batchId = batch.batchId.ifBlank { batchId.orEmpty() }
-        val seen = queue.map { it.id }.toMutableSet().apply { current?.let { add(it.id) } }
+        val seen = queue.map { it.id }.toMutableSet().apply { addAll(recentIds); current?.let { add(it.id) } }
         batch.tracks.filter { seen.add(it.id) }.forEach(queue::addLast)
     }
 }

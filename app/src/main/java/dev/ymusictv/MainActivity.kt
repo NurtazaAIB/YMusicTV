@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class Screen { MUSIC, AUDIO, SEARCH, ARTIST, PLAYER }
+enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
 
 @Composable fun YMusicTvApp() {
     val context=LocalContext.current; val prefs=remember{context.getSharedPreferences("auth",0)}; val diagnostics=remember{context.getSharedPreferences("diagnostics",0)}
@@ -88,8 +88,8 @@ enum class Screen { MUSIC, AUDIO, SEARCH, ARTIST, PLAYER }
         PlayerScreen(api,player,wave,now,{play(it)},::previous,::next,{id->artistId=id;screen=Screen.ARTIST}){screen=returnScreen}
     } else Column(Modifier.fillMaxSize().padding(38.dp).onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
         Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);now?.let{Button(onClick={screen=Screen.PLAYER}){Text("♫ ${it.title.take(24)}")}};Button(onClick=logout){Text("Выйти")}}
-        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Button(onClick={screen=Screen.MUSIC}){Text("Музыка")};Button(onClick={screen=Screen.AUDIO}){Text("Аудио")};Button(onClick={screen=Screen.SEARCH}){Text("Поиск")}}
-        when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.AUDIO->AudioScreen(api){list,i->returnScreen=Screen.AUDIO;playFromQueue(list,i)};Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}
+        Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Button(onClick={screen=Screen.MUSIC}){Text("Музыка")};Button(onClick={screen=Screen.FAVORITES}){Text("Любимое")};Button(onClick={screen=Screen.AUDIO}){Text("Аудио")};Button(onClick={screen=Screen.SEARCH}){Text("Поиск")}}
+        when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.FAVORITES->FavoritesScreen(api){list,i->returnScreen=Screen.FAVORITES;playFromQueue(list,i)};Screen.AUDIO->AudioScreen(api){list,i->returnScreen=Screen.AUDIO;playFromQueue(list,i)};Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}
     }
 }
 
@@ -136,7 +136,7 @@ private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return 
                         Button(onClick=previous,modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("⏮",fontSize=22.sp)}
                         Button(onClick={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()},modifier=Modifier.size(64.dp).shadow(if(playing)18.dp else 12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=26.sp)}
                         Button(onClick=next,modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("⏭",fontSize=22.sp)}
-                        Button(onClick={scope.launch{runCatching{wave.likeCurrent()}.onSuccess{message="Добавлено в любимое ♥"}.onFailure{message=it.message}}},modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("♡",fontSize=25.sp)}
+                        Button(onClick={scope.launch{track?.let{t->runCatching{api.likeTrack(t.id)}.onSuccess{message="Добавлено в Любимое ♥"}.onFailure{message=it.message}}}},modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("♡",fontSize=25.sp)}
                         Button(onClick={track?.artistId?.let(openArtist)},enabled=track?.artistId!=null,modifier=Modifier.size(64.dp).shadow(12.dp,CircleShape),contentPadding=PaddingValues(0.dp)){Text("♙",fontSize=25.sp)}
                     }
                     message?.let{Text(it,color=Color(0xFFD6B5FF),fontSize=13.sp)}
@@ -154,6 +154,8 @@ private fun clock(ms:Long):String { val total=(ms.coerceAtLeast(0)/1000);return 
     }
 }
 
+
+@Composable private fun FavoritesScreen(api:YandexMusicApi,play:(List<Track>,Int)->Unit){var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var loading by remember{mutableStateOf(true)};var error by remember{mutableStateOf<String?>(null)};LaunchedEffect(Unit){loading=true;runCatching{api.likedTracks()}.onSuccess{tracks=it}.onFailure{error=it.message};loading=false};Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("Любимое",fontSize=30.sp,color=Color.White);when{loading->Text("Загружаем сохранённые треки…",color=Color.LightGray);error!=null->Text(error!!,color=Color(0xFFFF8A80));tracks.isEmpty()->Text("В Яндекс Музыке пока нет сохранённых треков",color=Color.Gray);else->TrackList(tracks,play)}}}
 @Composable private fun SearchScreen(api:YandexMusicApi,play:(List<Track>,Int)->Unit){var q by remember{mutableStateOf("")};var tracks by remember{mutableStateOf<List<Track>>(emptyList())};val scope=rememberCoroutineScope();Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text("Поиск",fontSize=30.sp,color=Color.White);Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){OutlinedTextField(q,{q=it},label={Text("Трек, исполнитель, сказка")},modifier=Modifier.width(520.dp));Button(onClick={scope.launch{tracks=runCatching{api.searchTracks(q)}.getOrDefault(emptyList())}}){Text("Найти")}};TrackList(tracks,play)}}
 @Composable private fun AudioScreen(api:YandexMusicApi,play:(List<Track>,Int)->Unit){var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var title by remember{mutableStateOf("Аудио")};val scope=rememberCoroutineScope();fun search(t:String,q:String){title=t;scope.launch{tracks=runCatching{api.searchTracks(q)}.getOrDefault(emptyList())}};Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(title,fontSize=30.sp,color=Color.White);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){Button(onClick={search("Ертегі","қазақша ертегілер")}){Text("Ертегі")};Button(onClick={search("Сказка","детские сказки")}){Text("Сказка")};Button(onClick={search("Аудиокниги","аудиокнига")}){Text("Аудиокниги")};Button(onClick={search("Подкасты","подкаст")}){Text("Подкасты")}};TrackList(tracks,play)}}
 @Composable private fun TrackList(tracks:List<Track>,play:(List<Track>,Int)->Unit){LazyColumn(verticalArrangement=Arrangement.spacedBy(7.dp),modifier=Modifier.fillMaxWidth().heightIn(max=455.dp)){itemsIndexed(tracks,key={_,t->t.id}){i,t->TrackRow(t,onClick={play(tracks,i)})}}}

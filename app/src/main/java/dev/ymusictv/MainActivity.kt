@@ -83,7 +83,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
+enum class Screen { MUSIC, SEARCH, ARTIST, PLAYER }
 
 @Composable fun YMusicTvApp() {
     val context=LocalContext.current; val prefs=remember{context.getSharedPreferences("auth",0)}; val diagnostics=remember{context.getSharedPreferences("diagnostics",0)}
@@ -115,8 +115,8 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
         PlayerScreen(api,player,wave,now,{play(it)},::previous,::next,{id->artistId=id;screen=Screen.ARTIST}){screen=returnScreen}
     } else Column(Modifier.fillMaxSize().padding(38.dp).onPreviewKeyEvent{e->if(e.nativeKeyEvent.action==KeyEvent.ACTION_DOWN)when(e.nativeKeyEvent.keyCode){KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE->{if(player.exo.isPlaying)player.exo.pause()else player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PLAY->{player.exo.play();true};KeyEvent.KEYCODE_MEDIA_PAUSE->{player.exo.pause();true};KeyEvent.KEYCODE_MEDIA_PREVIOUS->{previous();true};else->false}else false},verticalArrangement=Arrangement.spacedBy(15.dp)){
         if(now!=null) MiniPlayer(now!!,player,onOpen={returnScreen=screen;screen=Screen.PLAYER},onToggle={if(player.exo.isPlaying)player.exo.pause()else player.exo.play()}) else Row(horizontalArrangement=Arrangement.spacedBy(10.dp)){Text("Музыка",fontSize=30.sp,color=Color.White,modifier=Modifier.weight(1f));Text(name,fontSize=16.sp,color=Color.LightGray);GlassButton("Выйти",{confirmLogout=true})}
-        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TvNavButton("Музыка",screen==Screen.MUSIC){screen=Screen.MUSIC};TvNavButton("Любимое",screen==Screen.FAVORITES){screen=Screen.FAVORITES};TvNavButton("Аудио",screen==Screen.AUDIO){screen=Screen.AUDIO};TvNavButton("Поиск",screen==Screen.SEARCH){screen=Screen.SEARCH}}
-        Box(Modifier.weight(1f).fillMaxWidth()){when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.FAVORITES->FavoritesScreen(api){list,i->returnScreen=Screen.FAVORITES;playFromQueue(list,i)};Screen.AUDIO->AudioScreen(api){list,i->returnScreen=Screen.AUDIO;playFromQueue(list,i)};Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}}
+        Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TvNavButton("Музыка",screen==Screen.MUSIC){screen=Screen.MUSIC};TvNavButton("Поиск",screen==Screen.SEARCH){screen=Screen.SEARCH}}
+        Box(Modifier.weight(1f).fillMaxWidth()){when(screen){Screen.MUSIC->MusicScreen(api,wave,{t->waveMode=true;queue=emptyList();queueIndex=-1;returnScreen=Screen.MUSIC;play(t)},{list,i->returnScreen=Screen.MUSIC;playFromQueue(list,i)});Screen.SEARCH->SearchScreen(api){list,i->returnScreen=Screen.SEARCH;playFromQueue(list,i)};Screen.ARTIST->ArtistScreen(api,artistId){list,i->returnScreen=Screen.ARTIST;playFromQueue(list,i)};Screen.PLAYER->{}}}
     }
     if(confirmLogout) AlertDialog(onDismissRequest={confirmLogout=false},title={Text("Выйти из аккаунта?")},text={Text("Точно выйти из Яндекс Музыки на этом телевизоре?")},confirmButton={Button(onClick={confirmLogout=false;logout()}){Text("Выйти")}},dismissButton={Button(onClick={confirmLogout=false}){Text("Отмена")}})
 }

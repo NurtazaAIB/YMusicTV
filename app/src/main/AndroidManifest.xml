@@ -3,12 +3,13 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.software.leanback" android:required="true" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
-    <application android:theme="@style/Theme.YMusicTV" android:label="Музыка" android:banner="@drawable/tv_banner" android:usesCleartextTraffic="false" android:allowBackup="false">
-        <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>
+    <application android:theme="@style/Theme.YMusicTV" android:label="Музыка" android:usesCleartextTraffic="false" android:allowBackup="false">
+        <activity android:name=".MainActivity" android:screenOrientation="landscape" android:exported="true" />
+        <activity-alias android:name=".LauncherDay" android:targetActivity=".MainActivity" android:enabled="true" android:exported="true" android:icon="@drawable/icon_day" android:banner="@drawable/banner_day" android:label="Музыка">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherNight" android:targetActivity=".MainActivity" android:enabled="false" android:exported="true" android:icon="@drawable/icon_night" android:banner="@drawable/banner_night" android:label="Музыка">
+            <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LEANBACK_LAUNCHER" /></intent-filter>
+        </activity-alias>
     </application>
 </manifest>

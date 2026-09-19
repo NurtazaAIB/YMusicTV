@@ -276,13 +276,6 @@ class YandexMusicApi(private val http: OkHttpClient = OkHttpClient()) {
         return out
     }
 
-    suspend fun likeTrack(trackId: String): Boolean = withContext(Dispatchers.IO) {
-        val userId = uid()
-        val body = FormBody.Builder().add("track-ids", trackId).build()
-        val req = authBuilder("$API/users/$userId/likes/tracks/add-multiple").post(body).build()
-        val j = executeJson(req)
-        j.has("result")
-    }
 
     suspend fun artistTracks(artistId: String, pageSize: Int = 50): List<Track> {
         val result = getResult("$API/artists/$artistId/tracks?page=0&page-size=$pageSize")

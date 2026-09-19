@@ -1,6 +1,9 @@
 package dev.ymusictv
 
 import android.os.Bundle
+import android.content.ComponentName
+import android.content.pm.PackageManager
+import java.util.Calendar
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -8,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -56,7 +61,20 @@ class MainActivity : ComponentActivity() {
             runCatching { getSharedPreferences("diagnostics", MODE_PRIVATE).edit().putString("last_crash", throwable.stackTraceToString().take(12000)).putLong("last_crash_time", System.currentTimeMillis()).commit() }
             previousHandler?.uncaughtException(thread, throwable)
         }
-        super.onCreate(savedInstanceState); setContent { YMusicTvApp() }
+        super.onCreate(savedInstanceState); updateLauncherForTime(); setContent { YMusicTvApp() }
+    }
+
+    override fun onResume() { super.onResume(); updateLauncherForTime() }
+
+    private fun updateLauncherForTime() {
+        val day = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) in 6..17
+        val pm = packageManager
+        fun set(alias:String, enabled:Boolean) = pm.setComponentEnabledSetting(
+            ComponentName(this, "dev.ymusictv.$alias"),
+            if(enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP
+        )
+        runCatching { set("LauncherDay", day); set("LauncherNight", !day) }
     }
 }
 
@@ -67,12 +85,16 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
     val api=remember{YandexMusicApi().apply{token=prefs.getString("access_token",null)}}
     var loggedIn by remember{mutableStateOf(false)}; var checkingAuth by remember{mutableStateOf(true)}; var code by remember{mutableStateOf<String?>(null)}; var url by remember{mutableStateOf<String?>(null)}; var error by remember{mutableStateOf<String?>(null)}; var authInProgress by remember{mutableStateOf(false)}; var lastCrash by remember{mutableStateOf(diagnostics.getString("last_crash",null))}; val scope=rememberCoroutineScope()
     LaunchedEffect(Unit){ val saved=prefs.getString("access_token",null); val refresh=prefs.getString("refresh_token",null); if(!saved.isNullOrBlank()){api.token=saved; val ok=runCatching{api.accountName();true}.getOrDefault(false); if(ok) loggedIn=true else if(!refresh.isNullOrBlank()) runCatching{api.refreshAccessToken(refresh)}.onSuccess{t->prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).putLong("expires_at",System.currentTimeMillis()+((t.expiresIn?:3600)*1000L)).apply();loggedIn=true}}; checkingAuth=false }
+    var dayMode by remember { mutableStateOf(Calendar.getInstance().get(Calendar.HOUR_OF_DAY) in 6..17) }
+    LaunchedEffect(Unit) { while(true) { dayMode = Calendar.getInstance().get(Calendar.HOUR_OF_DAY) in 6..17; delay(60_000) } }
     MaterialTheme { Box(Modifier.fillMaxSize().background(Color(0xFF090A0D))) {
+        Image(painterResource(if(dayMode) R.drawable.bg_day else R.drawable.bg_night), null, Modifier.fillMaxSize(), contentScale=ContentScale.Crop)
+        Box(Modifier.fillMaxSize().background(if(dayMode) Color.Black.copy(alpha=.38f) else Color.Black.copy(alpha=.48f)))
         if(checkingAuth) Column(Modifier.padding(38.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){Text("Музыка",fontSize=46.sp,color=YandexYellow);Text("Проверяем авторизацию…",color=Color.LightGray)}
         else if(!loggedIn) Column(Modifier.padding(38.dp),verticalArrangement=Arrangement.spacedBy(18.dp)){ Text("Музыка",fontSize=46.sp,color=YandexYellow); Text("Яндекс Музыка для Android TV",fontSize=21.sp,color=Color.LightGray)
             Button(onClick={if(!authInProgress)scope.launch{authInProgress=true;error=null;try{val d=api.requestDeviceCode();code=d.userCode;url=d.verificationUrl;val interval=d.interval.coerceAtLeast(1);repeat((d.expiresIn/interval).coerceAtLeast(1)){delay(interval*1000L);val poll=runCatching{api.pollDeviceToken(d.deviceCode)};if(poll.isFailure){error="OAuth: ${poll.exceptionOrNull()?.message}";return@launch};poll.getOrNull()?.let{t->prefs.edit().putString("access_token",t.accessToken).putString("refresh_token",t.refreshToken).apply();diagnostics.edit().clear().apply();lastCrash=null;loggedIn=true;return@launch}};error="Код авторизации истёк"}catch(e:CancellationException){throw e}catch(e:Throwable){error="Ошибка входа: ${e.message}"}finally{authInProgress=false}}}){Text(if(authInProgress)"Ожидание подтверждения…" else "Войти в Яндекс")};code?.let{Text("Код: $it",fontSize=40.sp,color=YandexYellow)};url?.let{Text("Откройте на телефоне: $it",color=Color.White)};error?.let{Text(it,color=Color(0xFFFF8A80))};lastCrash?.let{Text(it.take(1000),color=Color(0xFFFFCCBC),fontSize=12.sp)} }
         else { val player=remember{TvPlayer(context)};val wave=remember{WaveSession(api)};DisposableEffect(Unit){onDispose{player.release()}};Home(api,player,wave){prefs.edit().clear().apply();api.token=null;loggedIn=false} }
-    }}
+    }}}
 }
 
 @Composable private fun Home(api:YandexMusicApi,player:TvPlayer,wave:WaveSession,logout:()->Unit){

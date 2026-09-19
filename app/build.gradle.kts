@@ -21,8 +21,8 @@ android {
         applicationId = "dev.ymusictv"
         minSdk = 28
         targetSdk = 35
-        versionCode = 35
-        versionName = "0.10.2"
+        versionCode = 37
+        versionName = "0.10.4"
     }
 
     compileOptions {

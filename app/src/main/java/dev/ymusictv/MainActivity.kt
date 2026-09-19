@@ -44,6 +44,7 @@ import androidx.tv.material3.Button
 import androidx.tv.material3.MaterialTheme
 import coil.compose.AsyncImage
 import dev.ymusictv.api.LyricsApi
+import dev.ymusictv.api.DynamicHomeApi
 import dev.ymusictv.api.WaveRestrictionsApi
 import dev.ymusictv.api.YandexMusicApi
 import dev.ymusictv.model.*
@@ -143,12 +144,23 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
 }
 
 @Composable private fun MusicScreen(api:YandexMusicApi,wave:WaveSession,playWave:(Track)->Unit,playQueue:(List<Track>,Int)->Unit){
-    var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var title by remember{mutableStateOf("Главная")};var error by remember{mutableStateOf<String?>(null)};var settings by remember{mutableStateOf(WaveSettings())};var restrictions by remember{mutableStateOf<WaveRestrictions?>(null)};var settingsLoading by remember{mutableStateOf(false)};var sections by remember{mutableStateOf<List<HomeSection>>(emptyList())};var showSettings by remember{mutableStateOf(false)};val scope=rememberCoroutineScope();LaunchedEffect(Unit){sections=runCatching{api.homeSections()}.getOrDefault(emptyList())}
+    var tracks by remember{mutableStateOf<List<Track>>(emptyList())};var title by remember{mutableStateOf("Главная")};var error by remember{mutableStateOf<String?>(null)};var settings by remember{mutableStateOf(WaveSettings())};var restrictions by remember{mutableStateOf<WaveRestrictions?>(null)};var settingsLoading by remember{mutableStateOf(false)};var sections by remember{mutableStateOf<List<HomeSection>>(emptyList())};var showSettings by remember{mutableStateOf(false)};var expandedSection by remember{mutableStateOf<HomeSection?>(null)};val scope=rememberCoroutineScope()
+    LaunchedEffect(Unit){runCatching{DynamicHomeApi.sections(api.token)}.onSuccess{sections=it}.onFailure{error="Главная: ${it.message}"}}
     fun loadSettings(){scope.launch{settingsLoading=true;error=null;runCatching{WaveRestrictionsApi.load(api.token)}.onSuccess{r->restrictions=r;settings=settings.copy(mood=r.moods.firstOrNull{it.value==settings.mood}?.value?:r.moods.firstOrNull()?.value?:settings.mood,diversity=r.diversities.firstOrNull{it.value==settings.diversity}?.value?:r.diversities.firstOrNull()?.value?:settings.diversity,language=r.languages.firstOrNull{it.value==settings.language}?.value?:r.languages.firstOrNull()?.value?:settings.language)}.onFailure{error="Настройки Волны: ${it.message}"};settingsLoading=false}}
-    fun waveStart(){scope.launch{error=null;runCatching{wave.start(settings)}.onSuccess{t->title="Моя Волна";t?.let{tracks=listOf(it);playWave(it)}}.onFailure{error=it.message}}};fun chart(){scope.launch{runCatching{api.chart()}.onSuccess{title="Чарт";tracks=it}.onFailure{error=it.message}}}
-    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){Text(title,fontSize=30.sp,color=Color.White);Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){GlassButton("▶  Моя Волна",{waveStart()});GlassButton("Чарт",{chart()});GlassButton(if(showSettings)"✕  Закрыть настройки" else "⚙  Настроить волну",{showSettings=!showSettings;if(showSettings)loadSettings()})}
-        if(showSettings){when{settingsLoading->Text("Получаем доступные настройки от Яндекса…",color=Color.LightGray);restrictions!=null->WaveSettingsPanel(settings,restrictions!!){settings=it};else->Text("Нет данных о настройках Волны",color=Color.Gray)}}
-        error?.let{Text(it,color=Color(0xFFFF8A80))};if(tracks.isNotEmpty())TrackList(tracks,playQueue)else LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp),modifier=Modifier.fillMaxWidth().heightIn(max=455.dp)){items(sections,key={it.title}){section->Column(verticalArrangement=Arrangement.spacedBy(7.dp)){Text(section.title,fontSize=22.sp,color=Color.White);LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp)){items(section.cards.take(12),key={it.id+it.title}){card->HomePoster(card){scope.launch{if(!card.uid.isNullOrBlank()&&!card.kind.isNullOrBlank()){tracks=runCatching{api.playlistTracks(card.uid!!,card.kind!!)}.getOrDefault(emptyList());title=card.title}}}}}}}}
+    fun waveStart(){scope.launch{error=null;runCatching{wave.start(settings)}.onSuccess{t->title="Моя Волна";expandedSection=null;t?.let{tracks=listOf(it);playWave(it)}}.onFailure{error=it.message}}}
+    fun chart(){scope.launch{runCatching{api.chart()}.onSuccess{title="Чарт";expandedSection=null;tracks=it}.onFailure{error=it.message}}}
+    fun openCard(card:HomeCard){scope.launch{error=null;val loaded=runCatching{when{!card.uid.isNullOrBlank()&&!card.kind.isNullOrBlank()->api.playlistTracks(card.uid!!,card.kind!!);card.type.contains("album",true)&&card.id.isNotBlank()->DynamicHomeApi.albumTracks(api.token,card.id);else->emptyList()}}.onFailure{error=it.message}.getOrDefault(emptyList());if(loaded.isNotEmpty()){tracks=loaded;title=card.title;expandedSection=null}}}
+    Column(verticalArrangement=Arrangement.spacedBy(10.dp)){
+        if(expandedSection!=null){
+            Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(10.dp)){GlassButton("‹  Назад",{expandedSection=null});Text(expandedSection!!.title,fontSize=30.sp,color=Color.White)}
+            LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp),modifier=Modifier.fillMaxWidth().heightIn(max=520.dp)){items(expandedSection!!.cards.chunked(4)){rowCards->Row(horizontalArrangement=Arrangement.spacedBy(12.dp)){rowCards.forEach{card->HomePoster(card){openCard(card)}}}}}
+        }else{
+            Text(title,fontSize=30.sp,color=Color.White)
+            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){GlassButton("▶  Моя Волна",{waveStart()});GlassButton("Чарт",{chart()});GlassButton(if(showSettings)"✕  Закрыть настройки" else "⚙  Настроить волну",{showSettings=!showSettings;if(showSettings)loadSettings()})}
+            if(showSettings){when{settingsLoading->Text("Получаем доступные настройки от Яндекса…",color=Color.LightGray);restrictions!=null->WaveSettingsPanel(settings,restrictions!!){settings=it};else->Text("Нет данных о настройках Волны",color=Color.Gray)}}
+            error?.let{Text(it,color=Color(0xFFFF8A80))}
+            if(tracks.isNotEmpty())TrackList(tracks,playQueue)else LazyColumn(verticalArrangement=Arrangement.spacedBy(12.dp),modifier=Modifier.fillMaxWidth().heightIn(max=455.dp)){items(sections,key={it.title}){section->Column(verticalArrangement=Arrangement.spacedBy(7.dp)){Text(section.title,fontSize=22.sp,color=Color.White);LazyRow(horizontalArrangement=Arrangement.spacedBy(12.dp)){items(section.cards.take(4),key={it.id+it.title}){card->HomePoster(card){openCard(card)}};if(section.cards.size>4)item{GlassButton("Далее  ›",{expandedSection=section},Modifier.width(150.dp))}}}}}
+        }
     }
 }
 

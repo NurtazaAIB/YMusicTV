@@ -30,3 +30,11 @@ jobs:
           name: YMusicTV-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+      - name: Pack source snapshot
+        run: zip -r YMusicTV-source.zip app tools build.gradle.kts settings.gradle.kts gradle.properties .github/ymusictv-test.keystore.b64
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: YMusicTV-source-snapshot
+          path: YMusicTV-source.zip
+          if-no-files-found: error

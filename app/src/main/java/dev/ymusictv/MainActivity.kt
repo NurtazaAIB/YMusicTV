@@ -128,15 +128,15 @@ enum class Screen { MUSIC, FAVORITES, AUDIO, SEARCH, ARTIST, PLAYER }
     var pauseFocused by remember{mutableStateOf(false)}
     LaunchedEffect(track.id){while(true){pos=player.exo.currentPosition.coerceAtLeast(0);duration=player.exo.duration.takeIf{it>0}?:track.durationMs;playing=player.exo.isPlaying;delay(300)}}
     val progress=if(duration>0)(pos.toFloat()/duration.toFloat()).coerceIn(0f,1f) else 0f
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFE9E9EC))){
-        Row(Modifier.fillMaxWidth().height(72.dp).padding(horizontal=8.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
-            Button(onClick=onOpen,modifier=Modifier.weight(1f).fillMaxHeight().onFocusChanged{infoFocused=it.isFocused},shape=androidx.tv.material3.ButtonDefaults.shape(shape=RoundedCornerShape(13.dp)),colors=androidx.tv.material3.ButtonDefaults.colors(containerColor=Color.Transparent,contentColor=Color(0xFF17181D),focusedContainerColor=Color(0xFF25272E),focusedContentColor=Color.White),contentPadding=PaddingValues(horizontal=8.dp)){
+    Column(Modifier.fillMaxWidth()){
+        Row(Modifier.fillMaxWidth().height(64.dp),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            Button(onClick=onOpen,modifier=Modifier.weight(1f).fillMaxHeight().onFocusChanged{infoFocused=it.isFocused},shape=androidx.tv.material3.ButtonDefaults.shape(shape=RoundedCornerShape(13.dp)),colors=androidx.tv.material3.ButtonDefaults.colors(containerColor=Color.Transparent,contentColor=Color.White,focusedContainerColor=Color(0xFF25272E),focusedContentColor=Color.White,pressedContainerColor=Color(0xFF25272E)),contentPadding=PaddingValues(horizontal=0.dp)){
                 Row(Modifier.fillMaxWidth(),verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(12.dp)){
-                    Box(Modifier.size(50.dp).clip(RoundedCornerShape(9.dp))){track.coverUrl?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
-                    Column(Modifier.weight(1f)){Text(track.title,maxLines=1,color=if(infoFocused)Color.White else Color(0xFF17181D),fontSize=17.sp);Text(track.artist,maxLines=1,color=if(infoFocused)Color.LightGray else Color(0xFF5F6066),fontSize=13.sp)}
+                    Box(Modifier.size(48.dp).clip(RoundedCornerShape(9.dp))){track.coverUrl?.let{AsyncImage(model=it,contentDescription=null,modifier=Modifier.fillMaxSize(),contentScale=ContentScale.Crop)}}
+                    Column(Modifier.weight(1f)){Text(track.title,maxLines=1,color=Color.White,fontSize=17.sp);Text(track.artist,maxLines=1,color=Color.LightGray,fontSize=13.sp)}
                 }
             }
-            Button(onClick=onToggle,modifier=Modifier.size(54.dp).onFocusChanged{pauseFocused=it.isFocused},shape=androidx.tv.material3.ButtonDefaults.shape(shape=RoundedCornerShape(13.dp)),colors=androidx.tv.material3.ButtonDefaults.colors(containerColor=Color.Transparent,contentColor=Color(0xFF17181D),focusedContainerColor=Color(0xFF25272E),focusedContentColor=Color.White),contentPadding=PaddingValues(0.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=21.sp,color=if(pauseFocused)Color.White else Color(0xFF17181D))}
+            Button(onClick=onToggle,modifier=Modifier.size(52.dp).onFocusChanged{pauseFocused=it.isFocused},shape=androidx.tv.material3.ButtonDefaults.shape(shape=RoundedCornerShape(13.dp)),colors=androidx.tv.material3.ButtonDefaults.colors(containerColor=Color.Transparent,contentColor=Color.White,focusedContainerColor=Color(0xFF25272E),focusedContentColor=Color.White,pressedContainerColor=Color(0xFF25272E)),contentPadding=PaddingValues(0.dp)){Text(if(playing)"Ⅱ" else "▶",fontSize=21.sp,color=Color.White)}
         }
         LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth().height(3.dp))
     }

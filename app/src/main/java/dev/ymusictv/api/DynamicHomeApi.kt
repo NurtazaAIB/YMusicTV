@@ -14,11 +14,12 @@ import java.net.URLEncoder
 
 object DynamicHomeApi {
     private const val API = "https://api.music.yandex.net"
-    private const val UA = "MusicTV/0.10.4 AndroidTV"
+    private const val UA = "MusicTV/0.10.5 AndroidTV"
     private val http = OkHttpClient()
 
     suspend fun sections(token:String?):List<HomeSection> = withContext(Dispatchers.IO) {
-        val root=json("$API/landing3",token)
+        val blocks=listOf("personalplaylists","mixes","new-playlists","new-releases","recently-played","recommended-playlists","editorial-new-releases").joinToString(",")
+        val root=json("$API/landing3?blocks=${URLEncoder.encode(blocks,"UTF-8")}",token)
         val result=root.optJSONObject("result") ?: throw IOException("Пустой landing3")
         val blocks=result.optJSONArray("blocks") ?: JSONArray()
         val out=mutableListOf<HomeSection>()
